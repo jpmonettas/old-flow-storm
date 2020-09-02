@@ -1,11 +1,13 @@
 (ns tracex.server
   (:require [org.httpkit.server :as http-server]
             [compojure.core :as compojure :refer [GET POST]]
+            [compojure.route :refer [resources]]
             [taoensso.sente :as sente]
             [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
             [ring.middleware.cors :refer [wrap-cors]]
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.util.response :refer [resource-response]]
             [clojure.core.async :refer [go-loop] :as async]))
 
 (def server (atom nil))
@@ -15,7 +17,8 @@
   (let [{:keys [ch-recv send-fn connected-uids
                 ajax-post-fn ajax-get-or-ws-handshake-fn]}
         (sente/make-channel-socket! (get-sch-adapter)
-                                    {:csrf-token-fn nil})]
+                                    {:csrf-token-fn nil
+                                     :user-id-fn (fn [req] (:client-id req))})]
 
     {:ws-routes (compojure/routes (GET  "/chsk" req (ajax-get-or-ws-handshake-fn req))
                                   (POST "/chsk" req (ajax-post-fn                req)))
@@ -25,11 +28,19 @@
 
 (defn build-routes [opts]
   (compojure/routes
-   (GET  "/" req {:status 200
-                  :body "GREAT!"})))
+   (GET "/" [] (resource-response "index.html" {:root "public"}))
+   (resources "/")))
 
-(defn handle-ws-message [{:keys [event]}]
-  (println "Server handling ws event " event))
+(defn handle-ws-message [send-fn {:keys [event client-id user-id] :as msg}]
+  (println "DEBUG Browser got " client-id user-id event)
+
+  (case client-id
+    "browser" (println "Got event from browser" event)
+
+    ;; if we get a message from tracer, just forward it to the browser
+    "tracer"  (let [[evk] event]
+                (when (#{:tracex/init-trace :tracex/add-trace} evk)
+                 (send-fn "browser" event)))))
 
 (defn -main [& args]
   (let [{:keys [ws-routes ws-send-fn ch-recv connected-uids-atom]} (build-websocket)
@@ -37,7 +48,7 @@
 
     (go-loop []
       (try
-        (handle-ws-message (async/<! ch-recv))
+        (handle-ws-message ws-send-fn (async/<! ch-recv))
         (catch Exception e
           (println "ERROR handling ws message")))
       (recur))

@@ -1,0 +1,7 @@
+{:source-paths ["src"]
+ :dependencies [[reagent "0.9.1"]
+                [com.taoensso/sente "1.16.0-alpha2"]
+                [org.clojure/core.async "1.3.610"]]
+ :builds {:client {:target :browser
+                   :output-dir "resources/public/js"
+                   :modules {:main {:init-fn tracex.client/main}}}}}

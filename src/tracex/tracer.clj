@@ -11,6 +11,7 @@
 
 (defn connect []
   (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
+                                                                                              :client-id "tracer"
                                                                                               :host "localhost"
                                                                                               :port 8080})]
     (reset! send-fn-a send-fn)))
