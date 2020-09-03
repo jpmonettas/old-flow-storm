@@ -32,8 +32,6 @@
    (resources "/")))
 
 (defn handle-ws-message [send-fn {:keys [event client-id user-id] :as msg}]
-  (println "DEBUG Browser got " client-id user-id event)
-
   (case client-id
     "browser" (println "Got event from browser" event)
 
