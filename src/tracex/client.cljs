@@ -1,10 +1,16 @@
 (ns tracex.client
   (:require [reagent.core :as r]
             [clojure.core.async :refer [go-loop] :as async]
-            [taoensso.sente  :as sente]))
+            [taoensso.sente  :as sente]
+            [tracex.tracer :as tracer])
+  (:require-macros [tracex.instrument :refer [t]]))
 
 (defn main-screen []
-  [:div "It works now!!!"])
+  [:div {:on-click (fn []
+                     (println "Click")
+                     (println "HEREEEEEEEEE" (t (-> 1
+                                                   (+ 2)
+                                                   (+ 10)))))} "It works now!!!"])
 
 (defn ^:dev/after-load mount-component []
   (r/render [main-screen] (.getElementById js/document "app")))
@@ -14,6 +20,7 @@
     (println "Got event " evt)))
 
 (defn  main []
+  (tracer/connect)
   (mount-component)
   (let [?csrf-token (when-let [el (.getElementById js/document "sente-csrf-token")]
           (.getAttribute el "data-csrf-token"))
