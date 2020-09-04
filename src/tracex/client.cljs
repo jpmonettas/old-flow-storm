@@ -3,6 +3,7 @@
             [clojure.core.async :refer [go-loop] :as async]
             [taoensso.sente  :as sente]
             [tracex.highlighter :refer [highlight-expr]]
+            [zprint.core :as zp]
             #_[tracex.tracer :as tracer]
             )
   #_(:require-macros [tracex.instrument :refer [t]]))
@@ -14,15 +15,15 @@
 
 (defn main-screen []
   (let [{:keys [form trace trace-idx]} @state
-        coor (:coor (get trace trace-idx))]
+        coor (:coor (get trace trace-idx))
+        form-str (zp/zprint-str form)]
     [:div
      [:div
       [:button {:on-click #(swap! state update :trace-idx dec)}"<"]
       [:button {:on-click #(swap! state update :trace-idx inc)}">"]]
      [:div (str ">>" coor)]
      [:div (str ">>" (:result (get trace trace-idx)))]
-     [:pre (str form)]
-     [:pre {:dangerouslySetInnerHTML {:__html (highlight-expr (str form) coor "<b>" "</b>")}} ]
+     [:pre {:dangerouslySetInnerHTML {:__html (highlight-expr form-str coor "<b>" "</b>")}} ]
      [:div (str trace)]]))
 
 (defn ^:dev/after-load mount-component []
