@@ -12,6 +12,8 @@
 (comment
 
   (require '[tracex.tracer :refer [connect]])
+  (require '[tracex.server :refer [-main]])
+
   (trace (let [a (+ 1 2)
                b (+ a a)]
            (map inc (range 10))))
