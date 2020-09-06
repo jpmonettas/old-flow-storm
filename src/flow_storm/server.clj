@@ -1,4 +1,4 @@
-(ns tracex.server
+(ns flow-storm.server
   (:require [org.httpkit.server :as http-server]
             [compojure.core :as compojure :refer [GET POST]]
             [compojure.route :refer [resources]]
@@ -37,7 +37,7 @@
 
     ;; if we get a message from tracer, just forward it to the browser
     "tracer"  (let [[evk] event]
-                (when (#{:tracex/init-trace :tracex/add-trace} evk)
+                (when (#{:flow-storm/init-trace :flow-storm/add-trace} evk)
                  (send-fn "browser" event)))))
 
 (defn -main [& args]

@@ -1,13 +1,13 @@
-(ns tracex.client
+(ns flow-storm.client
   (:require [reagent.core :as r]
             [clojure.core.async :refer [go-loop] :as async]
             [taoensso.sente  :as sente]
-            [tracex.highlighter :refer [highlight-expr]]
+            [flow-storm.highlighter :refer [highlight-expr]]
             [zprint.core :as zp]
             [cljs.tools.reader :as tools-reader]
-            #_[tracex.tracer :as tracer]
+            #_[flow-storm.tracer :as tracer]
             )
-  #_(:require-macros [tracex.instrument :refer [t]]))
+  #_(:require-macros [flow-storm.instrument :refer [t]]))
 
 (defonce state (r/atom {:form-id nil
                         :form nil
@@ -45,8 +45,8 @@
   (let [[_ evt] event]
     (let [[e-key e-data-map] evt]
       (case e-key
-        :tracex/add-trace  (swap! state update :trace (fn [t] (conj t (select-keys e-data-map [:coor :result]))))
-        :tracex/init-trace (swap! state assoc
+        :flow-storm/add-trace  (swap! state update :trace (fn [t] (conj t (select-keys e-data-map [:coor :result]))))
+        :flow-storm/init-trace (swap! state assoc
                                   :form-id (:traced-form-id e-data-map)
                                   :form (:form e-data-map)
                                   :trace []

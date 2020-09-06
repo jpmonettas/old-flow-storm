@@ -1,4 +1,4 @@
-(ns tracex.instrument
+(ns flow-storm.instrument
   (:require
    clojure.pprint
    [clojure.walk :as walk]))
@@ -426,18 +426,18 @@
 
 
 (defmacro trace [form]
-  `(binding [tracex.tracer/*form-id* ~(hash form)]
-     (tracex.tracer/init-trace tracex.tracer/*form-id* (quote ~form))
+  `(binding [flow-storm.tracer/*form-id* ~(hash form)]
+     (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~form))
      ~(-> form
-          (tag-form-recursively 'tracex.tracer/add-trace)
+          (tag-form-recursively 'flow-storm.tracer/add-trace)
           (instrument-tagged-code))))
 
 
 (comment
 
   (do
-    (require '[tracex.tracer :refer [connect]])
-    (require '[tracex.server :refer [-main]])
+    (require '[flow-storm.tracer :refer [connect]])
+    (require '[flow-storm.server :refer [-main]])
     (-main)
     (connect))
 

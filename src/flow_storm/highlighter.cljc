@@ -1,10 +1,10 @@
-(ns tracex.highlighter)
+(ns flow-storm.highlighter)
 
 (def form-str "(defmacro trace [form]
-  `(binding [tracex.tracer/*form-id* ~(hash form)]
-     (tracex.tracer/init-trace tracex.tracer/*form-id* (quote ~form))
+  `(binding [flow-storm.tracer/*form-id* ~(hash form)]
+     (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~form))
      ~(-> form
-          (inst/tag-form-recursively 'tracex.tracer/add-trace)
+          (inst/tag-form-recursively 'flow-storm.tracer/add-trace)
           (inst/instrument-tagged-code))))")
 
 (defn inc-last [v]
