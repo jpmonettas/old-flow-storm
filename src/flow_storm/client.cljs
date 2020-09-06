@@ -18,9 +18,12 @@
   (let [{:keys [form trace trace-idx]} @state
         coor (:coor (get trace trace-idx))
         form-str (zp/zprint-str form)
-        result  (-> (:result (get trace trace-idx))
-                    (tools-reader/read-string)
-                    zp/zprint-str)
+        result  (try
+                  (-> (:result (get trace trace-idx))
+                      (tools-reader/read-string)
+                      zp/zprint-str)
+                  (catch js/Error e
+                    (:result (get trace trace-idx))))
         hl-expr (highlight-expr form-str coor "<b class=\"hl\">" "</b>")]
     [:div.screen
 
