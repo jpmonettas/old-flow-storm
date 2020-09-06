@@ -94,5 +94,12 @@
   (find-coor-idx "(token  \n (otro \t 3 {:a 5}) 3)" [1 2 1])
 
   (find-expr-indexes "(token (otro 3 {:a 5}) 3)" [1 2])
+
   (highlight-expr "(let [a (+ 1 2) b (+ a a)] (map inc (range 10)))" [1 1] "|" "|")
+  (highlight-expr "(->> (range 10)
+                               (map inc)
+                               (filter odd?)
+                               (reduce +))" [4 1] "|" "|")
+
+
   )

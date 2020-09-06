@@ -6,13 +6,12 @@
 (def ^:dynamic *form-id* nil)
 
 (defn init-trace [traced-form-id form]
-  (@send-fn-a [:tracex/init-trace {:traced-form-id traced-form-id :form form}]))
+  (let [send-fn (or @send-fn-a println)]
+   (send-fn [:tracex/init-trace {:traced-form-id traced-form-id :form form}])))
 
-(defn add-trace [& args]
-  (let [[_ {:keys [coor]} result] (case (count args)
-                                    3 args
-                                    4 (rest args))]
-    (@send-fn-a [:tracex/add-trace {:traced-form-id *form-id* :coor coor :result (pr-str result)}])
+(defn add-trace [result {:keys [coor] :as extras}]
+  (let [send-fn (or @send-fn-a println)]
+    (send-fn [:tracex/add-trace {:traced-form-id *form-id* :coor coor :result (pr-str result)}])
     result))
 
 (defn connect []

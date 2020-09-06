@@ -16,14 +16,15 @@
 (defn main-screen []
   (let [{:keys [form trace trace-idx]} @state
         coor (:coor (get trace trace-idx))
-        form-str (zp/zprint-str form)]
+        form-str (zp/zprint-str form)
+        hl-expr (highlight-expr form-str coor "<b>" "</b>")]
     [:div
      [:div
       [:button {:on-click #(swap! state update :trace-idx dec)}"<"]
       [:button {:on-click #(swap! state update :trace-idx inc)}">"]]
      [:div (str ">>" coor)]
      [:div (str ">>" (:result (get trace trace-idx)))]
-     [:pre {:dangerouslySetInnerHTML {:__html (highlight-expr form-str coor "<b>" "</b>")}} ]
+     [:pre {:dangerouslySetInnerHTML {:__html hl-expr}} ]
      [:div (str trace)]]))
 
 (defn ^:dev/after-load mount-component []
@@ -36,7 +37,9 @@
         :tracex/add-trace  (swap! state update :trace (fn [t] (conj t (select-keys e-data-map [:coor :result]))))
         :tracex/init-trace (swap! state assoc
                                   :form-id (:traced-form-id e-data-map)
-                                  :form (:form e-data-map)))
+                                  :form (:form e-data-map)
+                                  :trace []
+                                  :trace-idx 0))
      (println "Got event " evt))
     ))
 

@@ -200,7 +200,7 @@
           bf   ::breakfunction} (meta form)]
      (cond
        (and bf extras)
-       (list bf form extras orig)
+       (list bf form extras)
        ;; If the form is a list and has no metadata, maybe it was
        ;; destroyed by a macro. Try guessing the extras by looking at
        ;; the first element. This fixes `->`, for instance.
@@ -212,7 +212,7 @@
                       (pop extras)
                       extras)]
          (if (and bf extras)
-           (list bf form extras orig)
+           (list bf form extras)
            form))
        :else form))))
 
@@ -435,8 +435,11 @@
 
 (comment
 
-  (require '[tracex.tracer :refer [connect]])
-  (require '[tracex.server :refer [-main]])
+  (do
+    (require '[tracex.tracer :refer [connect]])
+    (require '[tracex.server :refer [-main]])
+    (-main)
+    (connect))
 
   (trace (let [a (+ 1 2)
                b (+ a a)]
@@ -445,12 +448,12 @@
                 (filter odd?)
                 (reduce +))))
 
-  (trace (defn sum [a b] (+ a b)))
+  (trace
+   (defn factorial [n]
+     (if (zero? n)
+       1
+       (* n (factorial (dec n))))))
 
 
-  (defn factorial [n]
-    (if (zero? n)
-      1
-      (* n (factorial (dec n)))))
 
   )
