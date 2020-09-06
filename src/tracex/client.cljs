@@ -4,6 +4,7 @@
             [taoensso.sente  :as sente]
             [tracex.highlighter :refer [highlight-expr]]
             [zprint.core :as zp]
+            [cljs.tools.reader :as tools-reader]
             #_[tracex.tracer :as tracer]
             )
   #_(:require-macros [tracex.instrument :refer [t]]))
@@ -17,15 +18,25 @@
   (let [{:keys [form trace trace-idx]} @state
         coor (:coor (get trace trace-idx))
         form-str (zp/zprint-str form)
-        hl-expr (highlight-expr form-str coor "<b>" "</b>")]
-    [:div
-     [:div
+        result  (-> (:result (get trace trace-idx))
+                    (tools-reader/read-string)
+                    zp/zprint-str)
+        hl-expr (highlight-expr form-str coor "<b class=\"hl\">" "</b>")]
+    [:div.screen
+
+     [:div.controls.panel
       [:button {:on-click #(swap! state update :trace-idx dec)}"<"]
       [:button {:on-click #(swap! state update :trace-idx inc)}">"]]
-     [:div (str ">>" coor)]
-     [:div (str ">>" (:result (get trace trace-idx)))]
-     [:pre {:dangerouslySetInnerHTML {:__html hl-expr}} ]
-     [:div (str trace)]]))
+
+     [:div.code.panel
+      [:pre {:dangerouslySetInnerHTML {:__html hl-expr}}]]
+
+     [:div.result.panel
+      [:div result]]
+
+     #_[:div.debug.panel
+      [:div (str "Current coor: " coor)]
+      [:div (str "Trace: " trace)]]]))
 
 (defn ^:dev/after-load mount-component []
   (r/render [main-screen] (.getElementById js/document "app")))
