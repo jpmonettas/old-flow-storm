@@ -437,8 +437,6 @@
 
   (do
     (require '[flow-storm.tracer :refer [connect]])
-    (require '[flow-storm.server :refer [-main]])
-    (-main)
     (connect))
 
   (trace (let [a (+ 1 2)
