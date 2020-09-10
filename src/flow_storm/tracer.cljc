@@ -11,7 +11,9 @@
 
 (defn add-trace [& args]
   (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
-    (println "WARNING !!!!! Someone called add trace with 3 args" args)
+    (do
+      (println "WARNING !!!!! Someone called add trace with 3 args" args)
+      (@send-fn-a [:flow-storm/debug (str args)]))
 
     (let [[result {:keys [coor] :as extras}] args
           send-fn (or @send-fn-a println)]
