@@ -1,8 +1,29 @@
 (ns flow-storm.instrument
   (:require
    clojure.pprint
-   [clojure.walk :as walk]))
+   [clojure.walk :as walk]
+   [cljs.analyzer :as ana]))
 
+;;-----------------------------------------------------------------------------------------
+(def ^:dynamic *environment*)
+
+(defn target-from-env [env]
+  (if (contains? env :js-globals)
+    :cljs
+    :clj))
+
+(defn hacked-macroexpand-1 [form]
+  ((case (target-from-env *environment*)
+     :cljs (partial ana/macroexpand-1 *environment*)
+     :clj  macroexpand) form))
+
+(defn hacked-macroexpand [form]
+  (let [ex (hacked-macroexpand-1 form)]
+    (if (identical? ex form)
+      form
+      (hacked-macroexpand ex))))
+
+;;-----------------------------------------------------------------------------------------
 (defn merge-meta
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
   Like `vary-meta`, this only applies to immutable objects. For
@@ -38,7 +59,9 @@
                             (if (seq? form)
                               ;; Without this, `macroexpand-all`
                               ;; throws if called on `defrecords`.
-                              (try (macroexpand form)
+                              (try (let [r (hacked-macroexpand form)]
+                                     ;; TODO: change here
+                                     r)
                                    (catch ClassNotFoundException e form))
                               form))]
     (if md
@@ -51,6 +74,7 @@
           ;; We have to quote this, or it will get evaluated by
           ;; Clojure (even though it's inside meta).
           {original-key (list 'quote (strip-meta form))}))
+
       expanded)))
 
 ;;;; # Instrumentation
@@ -428,10 +452,10 @@
 (defmacro trace [form]
   `(binding [flow-storm.tracer/*form-id* ~(hash form)]
      (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~form))
-     ~(-> form
-          (tag-form-recursively 'flow-storm.tracer/add-trace)
-          (instrument-tagged-code))))
-
+     ~(binding [*environment* &env]
+        (-> form
+            (tag-form-recursively 'flow-storm.tracer/add-trace)
+            (instrument-tagged-code)))))
 
 (comment
 
@@ -452,6 +476,34 @@
        1
        (* n (factorial (dec n))))))
 
+
+  (macroexpand-1 '(trace (let [a 5]
+                           (+ a 2))))
+  (clojure.core/binding
+      [flow-storm.tracer/*form-id* 1234838379]
+    (flow-storm.tracer/init-trace
+     flow-storm.tracer/*form-id*
+     '(let [a 5] (+ a 2)))
+    (flow-storm.tracer/add-trace
+     (let
+         [(flow-storm.tracer/add-trace a {:coor [1 0]}) 5]
+       (flow-storm.tracer/add-trace
+        (+ (flow-storm.tracer/add-trace a {:coor [2 1]}) 2)
+        {:coor [2]}))
+     {:coor []}))
+
+  (clojure.core/binding
+ [flow-storm.tracer/*form-id* 1234838379]
+ (flow-storm.tracer/init-trace
+  flow-storm.tracer/*form-id*
+  '(let [a 5] (+ a 2)))
+ (flow-storm.tracer/add-trace
+  (let*
+   [a 5]
+   (flow-storm.tracer/add-trace
+    (+ (flow-storm.tracer/add-trace a {:coor [2 1]}) 2)
+    {:coor [2]}))
+  {:coor []}))
 
 
   )
