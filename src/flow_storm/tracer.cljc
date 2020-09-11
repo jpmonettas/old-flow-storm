@@ -7,7 +7,7 @@
 
 (defn init-trace [traced-form-id form]
   (let [send-fn (or @send-fn-a println)]
-   (send-fn [:flow-storm/init-trace {:traced-form-id traced-form-id :form form}])))
+   (send-fn [:flow-storm/init-trace {:traced-form-id traced-form-id :form (pr-str form)}])))
 
 (defn add-trace [& args]
   (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
