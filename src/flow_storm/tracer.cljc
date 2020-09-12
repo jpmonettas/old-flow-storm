@@ -3,11 +3,12 @@
 
 (defonce send-fn-a (atom nil))
 
+(def ^:dynamic *flow-id* nil)
 (def ^:dynamic *form-id* nil)
 
 (defn init-trace [traced-form-id form]
   (let [send-fn (or @send-fn-a println)]
-   (send-fn [:flow-storm/init-trace {:traced-form-id traced-form-id :form (pr-str form)}])))
+    (send-fn [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}])))
 
 (defn add-trace [& args]
   (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
@@ -18,7 +19,7 @@
     (let [[result {:keys [coor] :as extras}] args
           send-fn (or @send-fn-a println)]
 
-      (send-fn [:flow-storm/add-trace {:traced-form-id *form-id* :coor coor :result (pr-str result)}])
+      (send-fn [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
       result)))
 
 (defn connect

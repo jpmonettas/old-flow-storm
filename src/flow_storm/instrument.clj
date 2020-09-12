@@ -448,14 +448,37 @@
          (map first))))
 
 
+(defn fn-def-form? [form]
+  (when (and (seq? form)
+             (= (count form) 3)
+             (= 'def (first form)))
+    (let [[_ _ x] form]
+      (and (seq? x)
+           (= (first x) 'fn*)))))
+
+(defn wrap-dyn-bindings [orig-form forms]
+  `(binding [flow-storm.tracer/*flow-id* (or flow-storm.tracer/*flow-id*
+                                             ;; TODO: maybe change this to UUID
+                                             (rand-int 10000))
+             flow-storm.tracer/*form-id* ~(hash orig-form)]
+     (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~orig-form))
+     ~@forms))
+
+(defn wrap-fn-bodies [[_ & arities] wrapper]
+  `(fn*
+    ~@(->> arities
+         (map (fn [[args-vec & body]]
+                (list args-vec (wrapper body)))))))
 
 (defmacro trace [form]
-  `(binding [flow-storm.tracer/*form-id* ~(hash form)]
-     (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~form))
-     ~(binding [*environment* &env]
-        (-> form
-            (tag-form-recursively 'flow-storm.tracer/add-trace)
-            (instrument-tagged-code)))))
+  (let [inst-code (binding [*environment* &env]
+                    (-> form
+                        (tag-form-recursively 'flow-storm.tracer/add-trace)
+                        (instrument-tagged-code)))]
+    (if (fn-def-form? (second inst-code))
+      (let [[_ fn-name fn-form] (second inst-code)]
+        (list 'def fn-name (wrap-fn-bodies fn-form (partial wrap-dyn-bindings form))))
+      (wrap-dyn-bindings form (list inst-code)))))
 
 (comment
 
@@ -463,9 +486,12 @@
     (require '[flow-storm.tracer :refer [connect]])
     (connect))
 
+  (trace (defn foo [a b]
+     (+ a b 10)))
+
   (trace (let [a (+ 1 2)
                b (+ a a)]
-           (->> (range 10)
+           (->> (range (foo a b))
                 (map inc )
                 (filter odd?)
                 (reduce +))))
