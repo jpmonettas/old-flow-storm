@@ -473,7 +473,7 @@
 (defmacro trace [form]
   (let [inst-code (binding [*environment* &env]
                     (-> form
-                        (tag-form-recursively 'flow-storm.tracer/add-trace)
+                        (tag-form-recursively 'flow-storm.tracer/trace-and-return)
                         (instrument-tagged-code)))]
     (if (fn-def-form? (second inst-code))
       (let [[_ fn-name fn-form] (second inst-code)]

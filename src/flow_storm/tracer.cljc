@@ -10,7 +10,7 @@
   (let [send-fn (or @send-fn-a println)]
     (send-fn [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}])))
 
-(defn add-trace [& args]
+(defn trace-and-return [& args]
   (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
     (do
       (println "WARNING !!!!! Someone called add trace with 3 args" args)
