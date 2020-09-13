@@ -2,23 +2,30 @@
 
 **WIP !!!**
 
-Tracing library for the [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) (A experimental Clojure and ClojureScript debugger)
+Tracing companion library for the [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) (A experimental Clojure and ClojureScript debugger)
+
+Use this library to instrument your code.
 
 Tested on jvm, browser, nodejs, react-native.
 
-[![Clojars Project](https://img.shields.io/clojars/v/flow-storm.svg)](https://clojars.org/flow-storm)
+[![Clojars Project](https://img.shields.io/clojars/v/jpmonettas/flow-storm.svg)](https://clojars.org/jpmonettas/flow-storm)
 
 ## Before starting your day
 
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
 
 ```bash
-clj -Sdeps '{:deps {flow-storm-debugger {:mvn/version "0.1.0"}}}' -m flow-storm-debugger.server
+clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.1.0"}}}' -m flow-storm-debugger.server
 ```
 And point your browser to http://localhost:7722
 
-Now in you application:
-    - add this library to your dependencies (deps.edn, project.clj, shadow-cljs.edn, etc)
+Now in you application add this library to your dependencies (deps.edn, project.clj, shadow-cljs.edn, etc)
+
+Simple repl example :
+
+```bash
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.1.0"}}}'
+```
 
 ```clojure
 (require '[flow-storm.api :as fs-api :refer [trace]])
@@ -42,6 +49,7 @@ Now in you application:
           (filter odd?)
           (reduce +)))))
 
+(bar)
 ```
 
 Everytime a traced "flow" executes, it will trace the execution in the debugger.
@@ -49,3 +57,9 @@ Everytime a traced "flow" executes, it will trace the execution in the debugger.
 ## Notes
 
 On node js you need the npm websocket library for the library to work.
+
+For instrumenting remote code (like in react-native) use :
+
+```clojure
+(fs-api/connect {:host "192.168.1.8" :port 7722})
+```
