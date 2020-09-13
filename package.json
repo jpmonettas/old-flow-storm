@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "websocket": "*",
+    "shadow-cljs": "^2.11.1"
+  }
+}

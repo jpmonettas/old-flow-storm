@@ -1,0 +1,4 @@
+{:source-paths ["src" "test"]
+ :dependencies [[com.taoensso/sente "1.16.0-alpha2"]]
+ :builds {:tests {:target :node-test
+                   :output-to "output/run-tests.js"}}}

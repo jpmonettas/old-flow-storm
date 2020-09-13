@@ -6,20 +6,20 @@
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *form-id* nil)
 
+(defn ws-send [event]
+  ((or @send-fn-a println) event))
+
 (defn init-trace [traced-form-id form]
-  (let [send-fn (or @send-fn-a println)]
-    (send-fn [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}])))
+  (ws-send [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}]))
 
 (defn trace-and-return [& args]
   (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
     (do
       (println "WARNING !!!!! Someone called add trace with 3 args" args)
-      (@send-fn-a [:flow-storm/debug (str args)]))
+      (ws-send [:flow-storm/debug (str args)]))
 
-    (let [[result {:keys [coor] :as extras}] args
-          send-fn (or @send-fn-a println)]
-
-      (send-fn [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
+    (let [[result {:keys [coor] :as extras}] args]
+      (ws-send [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
       result)))
 
 (defn connect
@@ -28,5 +28,5 @@
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
                                                                                                :client-id "tracer"
                                                                                                :host (or host "localhost")
-                                                                                               :port (or port 8080)})]
+                                                                                               :port (or port 7722)})]
      (reset! send-fn-a send-fn))))

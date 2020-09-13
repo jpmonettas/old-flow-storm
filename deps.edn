@@ -1,3 +1,9 @@
 {:paths ["src"]
  :deps {org.clojure/clojurescript {:mvn/version "1.10.758"}
-        com.taoensso/sente        {:mvn/version "1.16.0-alpha2"}}}
+        com.taoensso/sente        {:mvn/version "1.16.0-alpha2"}}
+ :aliases {:test {:extra-paths ["test"]
+                  :extra-deps {com.cognitect/test-runner
+                               {:git/url "https://github.com/cognitect-labs/test-runner"
+                                :sha "209b64504cb3bd3b99ecfec7937b358a879f55c1"}}
+                  :main-opts ["-m" "cognitect.test-runner"
+                              "-d" "test"]}}}

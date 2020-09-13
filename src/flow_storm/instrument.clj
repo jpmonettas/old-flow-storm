@@ -470,15 +470,7 @@
          (map (fn [[args-vec & body]]
                 (list args-vec (wrapper body)))))))
 
-(defmacro trace [form]
-  (let [inst-code (binding [*environment* &env]
-                    (-> form
-                        (tag-form-recursively 'flow-storm.tracer/trace-and-return)
-                        (instrument-tagged-code)))]
-    (if (fn-def-form? (second inst-code))
-      (let [[_ fn-name fn-form] (second inst-code)]
-        (list 'def fn-name (wrap-fn-bodies fn-form (partial wrap-dyn-bindings form))))
-      (wrap-dyn-bindings form (list inst-code)))))
+
 
 (comment
 

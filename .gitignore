@@ -5,3 +5,5 @@
 flow-storm.jar
 main.js
 pom.xml.versionsBackup
+node_modules/
+output/
