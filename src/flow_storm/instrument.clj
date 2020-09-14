@@ -18,7 +18,9 @@
      :clj  macroexpand) form))
 
 (defn hacked-macroexpand [form]
-  (let [ex (hacked-macroexpand-1 form)]
+  (let [ex (if (seq? form)
+             (hacked-macroexpand-1 form)
+             form)]
     (if (identical? ex form)
       form
       (hacked-macroexpand ex))))
