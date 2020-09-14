@@ -15,7 +15,7 @@ Tested on jvm, browser, nodejs, react-native.
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.1.0"}}}' -m flow-storm-debugger.server
+clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.1.1"}}}' -m flow-storm-debugger.server
 ```
 And point your browser to http://localhost:7722
 
