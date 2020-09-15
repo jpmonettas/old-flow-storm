@@ -12,15 +12,9 @@
 (defn init-trace [traced-form-id form]
   (ws-send [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}]))
 
-(defn trace-and-return [& args]
-  (if (= (count args) 3) ;; TODO: remove if we don't see this anymore
-    (do
-      (println "WARNING !!!!! Someone called add trace with 3 args" args)
-      (ws-send [:flow-storm/debug (str args)]))
-
-    (let [[result {:keys [coor] :as extras}] args]
-      (ws-send [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
-      result)))
+(defn trace-and-return [result {:keys [coor] :as extras} orig-form]
+  (ws-send [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
+  result)
 
 (defn connect
   ([] (connect nil))

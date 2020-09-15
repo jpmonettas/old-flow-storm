@@ -226,7 +226,7 @@
           bf   ::breakfunction} (meta form)]
      (cond
        (and bf extras)
-       (list bf form extras)
+       (list bf form extras `(quote ~orig))
        ;; If the form is a list and has no metadata, maybe it was
        ;; destroyed by a macro. Try guessing the extras by looking at
        ;; the first element. This fixes `->`, for instance.
@@ -238,7 +238,7 @@
                       (pop extras)
                       extras)]
          (if (and bf extras)
-           (list bf form extras)
+           (list bf form extras `(quote ~orig))
            form))
        :else form))))
 
