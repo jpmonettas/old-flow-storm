@@ -16,6 +16,9 @@
   (ws-send [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
   result)
 
+(defn bound-trace [symb val {:keys [coor] :as extras}]
+  (ws-send [:flow-storm/add-bind-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :symbol (name symb) :value (pr-str val)}]))
+
 (defn connect
   ([] (connect nil))
   ([{:keys [host port]}]

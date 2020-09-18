@@ -2,7 +2,8 @@
   (:require
    clojure.pprint
    [clojure.walk :as walk]
-   [cljs.analyzer :as ana]))
+   [cljs.analyzer :as ana]
+   [clojure.string :as str]))
 
 ;;-----------------------------------------------------------------------------------------
 (def ^:dynamic *environment*)
@@ -133,6 +134,14 @@
   (into {} (map (fn [[k [v1 v2]]] [k [v1 (instrument v2)]])
                 args)))
 
+(defn- destructuring-symb? [symb]
+  (str/includes? (clojure.core/name symb) "__"))
+
+(defn- args-bind-tracers [args-vec extras]
+  (map (fn [symb]
+         `(flow-storm.tracer/bound-trace (quote ~symb) ~symb ~extras))
+       args-vec))
+
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
   [[name & args :as form]]
@@ -166,9 +175,16 @@
                              (map instrument (rest args))))
             '#{set!} (list (first args)
                            (instrument (second args)))
-            '#{loop* let* letfn*} (cons (-> (fn [i x] (if (odd? i) (instrument x) x))
-                                            (map-indexed (first args))
-                                            vec)
+            '#{loop* let* letfn*} (cons (->> (first args)
+                                             (partition 2)
+                                             (mapcat (fn [[symb x]]
+                                                       (let []
+                                                         (if (or (destructuring-symb? symb)
+                                                                 (#{'loop*} name))
+                                                           [symb (instrument x)]
+                                                           [symb (instrument x)
+                                                            '_ `(flow-storm.tracer/bound-trace (quote ~symb) ~symb ~(-> form meta ::extras))]))))
+                                             vec)
                                         (instrument-coll (rest args)))
             '#{reify* deftype*} (map #(if (seq? %)
                                         (let [[a1 a2 & ar] %]
@@ -179,12 +195,13 @@
             ;; `fn*` has several possible syntaxes.
             '#{fn*} (let [[a1 & [a2 & ar :as a1r]] args]
                       (cond
-                        (vector? a1)       (cons a1 (instrument-coll a1r))
+                        (vector? a1)       `(~a1 ~@(args-bind-tracers a1 (-> form meta ::extras)) ~@(instrument-coll a1r))
                         (and (symbol? a1)
-                             (vector? a2)) (list* a1 a2 (instrument-coll ar))
+                             (vector? a2)) `(~a1 ~a2 ~@(args-bind-tracers a1 (-> form meta ::extras)) ~@(instrument-coll a1r))
                         :else              (map #(if (seq? %)
-                                                   (-> (first %)
-                                                       (cons (instrument-coll (rest %)))
+                                                   (-> `(~(first %)
+                                                         ~@(args-bind-tracers (first %) (-> form meta ::extras))
+                                                         ~@(instrument-coll (rest %)))
                                                        (merge-meta (meta %)))
                                                    %)
                                                 args)))
