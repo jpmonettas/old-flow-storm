@@ -12,8 +12,9 @@
 (defn init-trace [traced-form-id form]
   (ws-send [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}]))
 
-(defn trace-and-return [result {:keys [coor] :as extras} orig-form]
-  (ws-send [:flow-storm/add-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}])
+(defn trace-and-return [result {:keys [coor outer-form?] :as extras} orig-form]
+  (ws-send [:flow-storm/add-trace (cond-> {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}
+                                    outer-form? (assoc :outer-form? true))])
   result)
 
 (defn bound-trace [symb val {:keys [coor] :as extras}]

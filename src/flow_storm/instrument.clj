@@ -481,7 +481,7 @@
                                              (rand-int 10000))
              flow-storm.tracer/*form-id* ~(hash orig-form)]
      (flow-storm.tracer/init-trace flow-storm.tracer/*form-id* (quote ~orig-form))
-     ~@forms))
+     (flow-storm.tracer/trace-and-return (do ~@forms) {:coor [] :outer-form? true} (quote ~orig-form))))
 
 (defn wrap-fn-bodies [[_ & arities] wrapper]
   `(fn*
