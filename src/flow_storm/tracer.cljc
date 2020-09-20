@@ -13,12 +13,17 @@
   (ws-send [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form (pr-str form)}]))
 
 (defn trace-and-return [result {:keys [coor outer-form?] :as extras} orig-form]
-  (ws-send [:flow-storm/add-trace (cond-> {:flow-id *flow-id* :form-id *form-id* :coor coor :result (pr-str result)}
+  (ws-send [:flow-storm/add-trace (cond-> {:flow-id *flow-id*
+                                           :form-id *form-id*
+                                           :coor coor
+                                           :result (binding [*print-length* (or *print-length* 50)]
+                                                     (pr-str result))}
                                     outer-form? (assoc :outer-form? true))])
   result)
 
 (defn bound-trace [symb val {:keys [coor] :as extras}]
-  (ws-send [:flow-storm/add-bind-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :symbol (name symb) :value (pr-str val)}]))
+  (ws-send [:flow-storm/add-bind-trace {:flow-id *flow-id* :form-id *form-id* :coor coor :symbol (name symb) :value (binding [*print-length* (or *print-length* 50)]
+                                                                                                                      (pr-str val))}]))
 
 (defn connect
   ([] (connect nil))
