@@ -26,3 +26,6 @@
     #_(binding [*out* *err*] (pp/pprint inst-code'))
 
     inst-code'))
+
+(defn read-trace-tag [form]
+  `(flow-storm.api/trace ~form))
