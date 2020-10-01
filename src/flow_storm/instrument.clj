@@ -427,22 +427,6 @@
    form))
 
 (defn instrument-tagged-code
-  "Return `form` instrumented with breakpoints.
-  It is expected that something in `form` will contain a
-  ::breakfunction metadata, whose value should be a var holding a macro. This
-  macro should take three arguments, the form being evaluated, a map containing
-  coordinates vector (see below), and the original form (before macroexpansion).
-
-  This function walks through the code attaching to objects the ::extras
-  metadata, which is a map currently containing a :coor vector. The :coor
-  specifies its position inside the top-level form. As an example, a coordinate
-  vector of [3 2 0] means:
-    - enter this sexp and move forward three times,
-    - enter this sexp and move forward twice,
-    - enter this sexp.
-
-  After that, it fully macroexpands the code, walks through it again, and wraps
-  in a ::breakfunction any form that contains the previously attached metadata."
   [form ctx]
 
   (-> form
@@ -461,21 +445,26 @@
       (and (seq? x)
            (= (first x) 'fn*)))))
 
-(defn wrap-dyn-bindings [orig-form {:keys [form-id form-flow-id instrument-fn on-outer-form-fn]} forms]
+(defn wrap-dyn-bindings [{:keys [orig-form args-vec fn-name form-id form-flow-id instrument-fn on-outer-form-fn]} forms]
   `(binding [flow-storm.tracer/*flow-id* (or flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
                                              (rand-int 10000))]
-     (~on-outer-form-fn ~form-id ~form-flow-id (quote ~orig-form))
+     (~on-outer-form-fn {:form-id ~form-id
+                         :form-flow-id ~form-flow-id
+                         :args-vec ~args-vec
+                         :fn-name ~fn-name}
+      (quote ~orig-form))
+
      (~instrument-fn
       (do ~@forms)
       {:coor [], :outer-form? true, :form-id ~form-id, :form-flow-id ~form-flow-id}
       (quote ~orig-form))))
 
-(defn wrap-fn-bodies [[_ & arities] wrapper]
+(defn wrap-fn-bodies [[_ & arities] ctx wrapper]
   `(fn*
     ~@(->> arities
          (map (fn [[args-vec & body]]
-                (list args-vec (wrapper body)))))))
+                (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
 
 

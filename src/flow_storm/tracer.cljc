@@ -13,8 +13,13 @@
 (defn ws-send [event]
   ((or @send-fn-a hold-event) event))
 
-(defn init-trace [traced-form-id form-flow-id form]
-  (ws-send [:flow-storm/init-trace {:flow-id *flow-id* :form-id traced-form-id :form-flow-id form-flow-id :form (pr-str form)}]))
+(defn init-trace [{:keys [form-id form-flow-id args-vec fn-name]} form]
+  (ws-send [:flow-storm/init-trace (cond-> {:flow-id *flow-id*
+                                            :form-id form-id
+                                            :form-flow-id form-flow-id
+                                            :form (pr-str form)}
+                                     args-vec (assoc :args-vec args-vec)
+                                     fn-name  (assoc :fn-name fn-name))]))
 
 (defn trace-and-return [result {:keys [coor outer-form? form-id form-flow-id]} orig-form]
   (ws-send [:flow-storm/add-trace (cond-> {:flow-id *flow-id*

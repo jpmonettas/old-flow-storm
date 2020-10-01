@@ -19,8 +19,12 @@
                         (i/instrument-tagged-code ctx)))
         inst-code' (if (i/fn-def-form? (second inst-code))
                      (let [[_ fn-name fn-form] (second inst-code)]
-                       (list 'def fn-name (i/wrap-fn-bodies fn-form (partial i/wrap-dyn-bindings form ctx))))
-                     (i/wrap-dyn-bindings form ctx (list inst-code)))]
+                       (list 'def fn-name (i/wrap-fn-bodies fn-form
+                                                            (assoc ctx
+                                                                   :orig-form form
+                                                                   :fn-name (name fn-name))
+                                                            i/wrap-dyn-bindings)))
+                     (i/wrap-dyn-bindings (assoc ctx :orig-form form) (list inst-code)))]
 
     ;; Uncomment to debug
     #_(binding [*out* *err*] (pp/pprint inst-code'))
