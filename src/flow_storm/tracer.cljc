@@ -44,7 +44,6 @@
   ([] (connect nil))
   ([{:keys [host port]}]
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
-                                                                                               :client-id "tracer"
                                                                                                :host (or host "localhost")
                                                                                                :port (or port 7722)})
          holded-events @pre-conn-events-holder]
