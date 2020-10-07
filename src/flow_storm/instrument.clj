@@ -1,32 +1,59 @@
 (ns flow-storm.instrument
+  "This namespace started as a fork of cider.instrument but
+  departed a lot from it to make it work for clojurescript and
+  to make it able to trace more stuff.
+
+  Provides utilities to recursively instrument forms for all our traces."
+
   (:require
    clojure.pprint
    [clojure.walk :as walk]
    [cljs.analyzer :as ana]
    [clojure.string :as str]))
 
-;;-----------------------------------------------------------------------------------------
+
+;;;;;;;;;;;;;;;;;;;;
+;; Some utilities ;;
+;;;;;;;;;;;;;;;;;;;;
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; ATTENTION!!, some nasty hacks  ;;
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Normal `clojure.core/macroexpand-1` works differently when being called from clojure and clojurescript. ;;
+;; See: https://github.com/jpmonettas/clojurescript-macro-issue                                            ;;
+;; One solution is to use clojure.core/macroexpand-1 when we are in a clojure environment                  ;;
+;; and user cljs.analyzer/macroexpand-1 when we are in a clojurescript one.                                ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; This will contain the macroexpansion environment
+;; the same you can get with the &env in defmacro
 (def ^:dynamic *environment*)
 
-(defn target-from-env [env]
+(defn target-from-env
+  "Given a env map return :cljs or :clj"
+  [env]
   (if (contains? env :js-globals)
     :cljs
     :clj))
 
-(defn hacked-macroexpand-1 [form]
+(defn normalized-macroexpand-1
+  "A version of macroexpand-1 that works for clojure and clojurescript
+  given it can tell from *environment* if we are in clojure or clojurescript"
+  [form]
   ((case (target-from-env *environment*)
      :cljs (partial ana/macroexpand-1 *environment*)
      :clj  macroexpand) form))
 
-(defn hacked-macroexpand [form]
+(defn normalized-macroexpand
+  "A macroexpand version that uses normalized-macroexpand-1 instead of clojure.core/macroexpand-1"
+  [form]
   (let [ex (if (seq? form)
-             (hacked-macroexpand-1 form)
+             (normalized-macroexpand-1 form)
              form)]
     (if (identical? ex form)
       form
-      (hacked-macroexpand ex))))
+      (normalized-macroexpand ex))))
 
-;;-----------------------------------------------------------------------------------------
 (defn merge-meta
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
   Like `vary-meta`, this only applies to immutable objects. For
@@ -62,7 +89,7 @@
                             (if (seq? form)
                               ;; Without this, `macroexpand-all`
                               ;; throws if called on `defrecords`.
-                              (try (let [r (hacked-macroexpand form)]
+                              (try (let [r (normalized-macroexpand form)]
                                      ;; TODO: change here
                                      r)
                                    (catch ClassNotFoundException e form))
@@ -80,8 +107,10 @@
 
       expanded)))
 
-;;;; # Instrumentation
-;;;
+;;;;;;;;;;;;;;;;;;;;;
+;; Instrumentation ;;
+;;;;;;;;;;;;;;;;;;;;;
+
 ;;; The following code is responsible for automatic instrumentation.
 ;;; This involves:
 ;;;    - knowing what's interesting and what's not,
@@ -134,7 +163,10 @@
   (into {} (map (fn [[k [v1 v2]]] [k [v1 (instrument v2 ctx)]])
                 args)))
 
-(defn- uninteresting-symb? [symb]
+(defn- uninteresting-symb?
+  "Return true if it is a uninteresting simbol,
+  like core.async, generated symbols, the _ symbol, etc."
+  [symb]
   (let [symb-name (name symb)]
    (or (= symb-name "_")
 
@@ -146,13 +178,23 @@
        (str/includes? symb-name "statearr-")
        (str/includes? symb-name "inst_"))))
 
-(defn- args-bind-tracers [args-vec coor {:keys [on-bind-fn form-id form-flow-id]}]
-  (keep (fn [symb]
-          (when-not (uninteresting-symb? symb)
-            `(~on-bind-fn (quote ~symb) ~symb ~{:coor coor
-                                                :form-id form-id
-                                                :form-flow-id form-flow-id})))
-       args-vec))
+(defn- bind-tracer
+  "Generates a form to trace a symbol value at coor."
+  [symb coor {:keys [on-bind-fn form-id form-flow-id] :as ctx}]
+  (when-not (uninteresting-symb? symb)
+    `(~on-bind-fn
+      (quote ~symb)
+      ~symb
+      ~{:coor coor
+        :form-id (:form-id ctx)
+        :form-flow-id (:form-flow-id ctx)})))
+
+(defn- args-bind-tracers
+  "Generates a collection of forms to trace args-vec symbols at coord."
+  [args-vec coor ctx]
+  (->> args-vec
+       (keep (fn [symb] (bind-tracer symb coor ctx)))))
+
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
@@ -186,6 +228,8 @@
                              (map #(instrument % ctx) (rest args))))
             '#{set!} (list (first args)
                            (instrument (second args) ctx))
+
+            ;; trace lets and loops bindings right side recursively
             '#{loop* let* letfn*} (cons (->> (first args)
                                              (partition 2)
                                              (mapcat (fn [[symb x]]
@@ -193,13 +237,14 @@
                                                          (if (or (uninteresting-symb? symb)
                                                                  (#{'loop*} name))
                                                            [symb (instrument x ctx)]
+
+                                                           ;; if it is not a loop add more _ bindings
+                                                           ;; that just trace the bound values
+                                                           ;; like [a (+ 1 2)] will became
+                                                           ;; [a (+ 1 2)
+                                                           ;;  _ (bound-trace a ...)]
                                                            [symb (instrument x ctx)
-                                                            '_ `(~(:on-bind-fn ctx)
-                                                                     (quote ~symb)
-                                                                     ~symb
-                                                                     ~{:coor (-> form meta ::coor)
-                                                                      :form-id (:form-id ctx)
-                                                                      :form-flow-id (:form-flow-id ctx)})]))))
+                                                            '_ (bind-tracer symb (-> form meta ::coor) ctx)]))))
                                              vec)
                                         (instrument-coll (rest args) ctx))
             '#{reify* deftype*} (map #(if (seq? %)
@@ -210,10 +255,15 @@
                                      args)
             ;; `fn*` has several possible syntaxes.
             '#{fn*} (let [[a1 & [a2 & ar :as a1r]] args]
+                      ;; For all fn* syntaxes instrument their body recursively and also
+                      ;; trace the args vector symbols values with bound-trace
                       (cond
+
                         (vector? a1)       `(~a1 ~@(args-bind-tracers a1 (-> form meta ::coor) ctx) ~@(instrument-coll a1r ctx))
+
                         (and (symbol? a1)
                              (vector? a2)) `(~a1 ~a2 ~@(args-bind-tracers a1 (-> form meta ::coor) ctx) ~@(instrument-coll a1r ctx))
+
                         :else              (map #(if (seq? %)
                                                    (-> `(~(first %)
                                                          ~@(args-bind-tracers (first %) (-> form meta ::coor) ctx)
@@ -250,9 +300,8 @@
   (cons name (instrument-coll args ctx)))
 
 (defn- maybe-instrument
-  "Return form wrapped in a breakpoint.
-  If function is given, use it to instrument form before wrapping. The
-  breakpoint is given by the form's ::breakfunction metadata."
+  "If the form has been tagged with ::coor on its meta, then instrument it
+  with trace-and-return"
   ([form {:keys [instrument-fn form-id form-flow-id] :as ctx}]
    (let [{coor ::coor
           [_ orig] ::original-form} (meta form)]
@@ -261,6 +310,7 @@
        (list instrument-fn form
              {:coor coor, :form-id form-id :form-flow-id form-flow-id}
              `(quote ~orig))
+
        ;; If the form is a list and has no metadata, maybe it was
        ;; destroyed by a macro. Try guessing the extras by looking at
        ;; the first element. This fixes `->`, for instance.
@@ -319,11 +369,7 @@
       (maybe-instrument (instrument-function-call form ctx) ctx))))
 
 (defn- instrument
-  "Walk through form and return it instrumented with breakpoints.
-  Only forms with a ::breakfunction metadata will be
-  instrumented, and even then only if it makes sense (e.g., the
-  binding names in a let form are never instrumented).
-  See `instrument-tagged-code` for more information."
+  "Walk through form and return it instrumented with traces. "
   [form ctx]
   (condp #(%1 %2) form
     ;; Function call, macro call, or special form.
@@ -336,11 +382,6 @@
     ;; Other things are uninteresting, literals or unreadable objects.
     form))
 
-;;;; ## Pre-instrumentation
-;;;
-;;; The following functions are used to populate with metadata and
-;;; macroexpand code before instrumenting it. This is where we
-;;; calculate all the ::coor vectors. See `instrument-tagged-code`.
 (defn- walk-indexed
   "Walk through form calling (f coor element).
   The value of coor is a vector of indices representing element's
@@ -406,14 +447,13 @@
 
 (defn- strip-instrumentation-meta
   "Remove all tags in order to reduce java bytecode size and enjoy cleaner code
-  printouts. We keep ::breakfunction for def symbols because that is how we
-  identify currently instrumented vars in list-instrumented-defs."
+  printouts."
   [form]
   (walk-indexed
    (fn [_ f]
      (if (instance? clojure.lang.IObj f)
        (let [keys [::original-form ::coor ::def-symbol]
-             f    #_(if (::def-symbol (meta f))
+             f    #_(if (::def-symbol (meta f)) ;; TODO: figure this out
                     (let [br (::breakfunction (meta f))
                           f1 (strip-meta f keys)]
                       (if br
@@ -437,7 +477,10 @@
       (instrument ctx)
       (strip-instrumentation-meta)))
 
-(defn fn-def-form? [form]
+(defn fn-def-form?
+  "Returns true if the form defines a fn.
+  Like (def fname (fn* [] ...))"
+  [form]
   (when (and (seq? form)
              (= (count form) 3)
              (= 'def (first form)))
@@ -445,7 +488,10 @@
       (and (seq? x)
            (= (first x) 'fn*)))))
 
-(defn wrap-dyn-bindings [{:keys [orig-form args-vec fn-name form-id form-flow-id instrument-fn on-outer-form-fn]} forms]
+(defn instrument-outer-forms
+  "Add some special instrumentation that is needed only on the outer form. Like
+  tracing the form source code, and wrapping *flow-id* dynamic bindings"
+  [{:keys [orig-form args-vec fn-name form-id form-flow-id instrument-fn on-outer-form-fn]} forms]
   `(binding [flow-storm.tracer/*flow-id* (or flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
                                              (rand-int 10000))]
@@ -460,13 +506,17 @@
       {:coor [], :outer-form? true, :form-id ~form-id, :form-flow-id ~form-flow-id}
       (quote ~orig-form))))
 
-(defn wrap-fn-bodies [[_ & arities] ctx wrapper]
+;; TODO: can this be mixed with normal fn* body instrumentation?
+(defn instrument-function-bodies [[_ & arities] ctx wrapper]
   `(fn*
     ~@(->> arities
          (map (fn [[args-vec & body]]
                 (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; For working at the repl ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
 

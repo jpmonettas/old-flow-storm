@@ -6,50 +6,82 @@
 (defonce pre-conn-events-holder (atom []))
 (def ^:dynamic *flow-id* nil)
 
-(defn hold-event [event]
+(defn- hold-event
+  "Collect the event in a internal atom (`pre-conn-events-holder`).
+  Ment to be used by the websocket ws-send to hold events
+  while a connection to the debugger is not ready."
+  [event]
   (println "[Holding]" event)
   (swap! pre-conn-events-holder conj event))
 
-(defn ws-send [event]
+(defn ws-send
+  "Send the event thru the connected websocket. If the websocket
+  connection is not ready, hold it in `pre-conn-events-holder`"
+  [event]
   ((or @send-fn-a hold-event) event))
 
-(defn init-trace [{:keys [form-id form-flow-id args-vec fn-name]} form]
-  (ws-send [:flow-storm/init-trace (cond-> {:flow-id *flow-id*
-                                            :form-id form-id
-                                            :form-flow-id form-flow-id
-                                            :form (pr-str form)}
-                                     args-vec (assoc :args-vec args-vec)
-                                     fn-name  (assoc :fn-name fn-name))]))
+(defn init-trace
+  "Instrumentation function. Sends the `:flow-storm/init-trace` trace"
+  [{:keys [form-id form-flow-id args-vec fn-name]} form]
+  (let [trace-data (cond-> {:flow-id *flow-id*
+                            :form-id form-id
+                            :form-flow-id form-flow-id
+                            :form (pr-str form)}
+                     args-vec (assoc :args-vec args-vec)
+                     fn-name  (assoc :fn-name fn-name))]
+    (ws-send [:flow-storm/init-trace trace-data])))
 
-(defn trace-and-return [result {:keys [coor outer-form? form-id form-flow-id]} orig-form]
-  (ws-send [:flow-storm/add-trace (cond-> {:flow-id *flow-id*
-                                           :form-id form-id
-                                           :form-flow-id form-flow-id
-                                           :coor coor
-                                           :result (binding [*print-length* (or *print-length* 50)]
-                                                     (pr-str result))}
-                                    outer-form? (assoc :outer-form? true))])
-  result)
+(defn trace-and-return
+  "Instrumentation function. Sends the `:flow-storm/add-trace` trace and returns the result."
+  [result {:keys [coor outer-form? form-id form-flow-id]} orig-form]
+  (let [trace-data (cond-> {:flow-id *flow-id*
+                            :form-id form-id
+                            :form-flow-id form-flow-id
+                            :coor coor
+                            :result (binding [*print-length* (or *print-length* 50)]
+                                      (pr-str result))}
+                     outer-form? (assoc :outer-form? true))]
 
-(defn bound-trace [symb val {:keys [coor form-id form-flow-id]}]
-  (ws-send [:flow-storm/add-bind-trace {:flow-id *flow-id*
-                                        :form-id form-id
-                                        :form-flow-id form-flow-id
-                                        :coor coor
-                                        :symbol (name symb)
-                                        :value (binding [*print-length* (or *print-length* 50)]
-                                                                                                                      (pr-str val))}]))
+    (ws-send [:flow-storm/add-trace trace-data])
+
+    result))
+
+(defn bound-trace
+  "Instrumentation function. Sends the `:flow-storm/add-bind-trace` trace"
+  [symb val {:keys [coor form-id form-flow-id]}]
+  (let [trace-data {:flow-id *flow-id*
+                    :form-id form-id
+                    :form-flow-id form-flow-id
+                    :coor coor
+                    :symbol (name symb)
+                    :value (binding [*print-length* (or *print-length* 50)]
+                             (pr-str val))}]
+    (ws-send [:flow-storm/add-bind-trace trace-data])))
 
 (defn connect
+  "Connects to the flow-storm debugger.
+  When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
   ([{:keys [host port]}]
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
                                                                                                :host (or host "localhost")
-                                                                                               :port (or port 7722)})
-         holded-events @pre-conn-events-holder]
+                                                                                               :port (or port 7722)})]
+
+     ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
+     ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
+     ;; It is assuming that the :chsk/state is the first event, which is error prone
      (take! ch-recv (fn [{:keys [event]}]
                       (when (= (first event) :chsk/state)
-                        (reset! send-fn-a send-fn)
-                        (println "Ws connection ready, re playing " (count holded-events) "events")
-                        (doseq [ev holded-events]
-                          (send-fn ev))))))))
+                        (let [holded-events @pre-conn-events-holder]
+                          (println "Ws connection ready, re playing " (count holded-events) "events")
+
+                          ;; set the websocket send-fn globally so it can be
+                          ;; used by the tracers
+                          (reset! send-fn-a send-fn)
+
+                          ;; replay all events we have on hold
+                          (doseq [ev holded-events]
+                            (send-fn ev))
+
+                          ;; empty the events holder atom
+                          (reset! pre-conn-events-holder []))))))))

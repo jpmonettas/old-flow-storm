@@ -1,11 +1,20 @@
 (ns flow-storm.api
+  "This is the only namespace intended for users.
+  Provides functionality to connect to the debugger and instrument forms."
   (:require [flow-storm.instrument :as i]
             [flow-storm.tracer :as t]
             [clojure.pprint :as pp]))
 
-(def connect t/connect)
+(def connect
+  "Connects to flow-storm debugger.
+  Once connected, all generated traces are sent to the debugger thru
+  a websocket connection.
+  Optionally you can provide a map with :host and :port keys."
+  t/connect)
 
-(defmacro trace [form]
+(defmacro trace
+  "Recursively instrument a form for tracing."
+  [form]
   (let [form-id (hash form)
         form-flow-id (rand-int 100000)
         ctx {:instrument-fn    'flow-storm.tracer/trace-and-return
@@ -19,14 +28,16 @@
                         (i/instrument-tagged-code ctx)))
         inst-code' (if (i/fn-def-form? (second inst-code))
                      (let [[_ fn-name fn-form] (second inst-code)]
-                       (list 'def fn-name (i/wrap-fn-bodies fn-form
-                                                            (assoc ctx
-                                                                   :orig-form form
-                                                                   :fn-name (name fn-name))
-                                                            i/wrap-dyn-bindings)))
-                     (i/wrap-dyn-bindings (assoc ctx :orig-form form) (list inst-code)))]
+                       (list 'def fn-name (i/instrument-function-bodies fn-form
+                                                                        (assoc ctx
+                                                                               :orig-form form
+                                                                               :fn-name (name fn-name))
+                                                                        i/instrument-outer-forms)))
+                     (i/instrument-outer-forms (assoc ctx :orig-form form) (list inst-code)))]
 
     ;; Uncomment to debug
+    ;; Printing on the *err* stream is important since
+    ;; printing on standard output messes  with clojurescript macroexpansion
     #_(binding [*out* *err*] (pp/pprint inst-code'))
 
     inst-code'))
