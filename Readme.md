@@ -1,8 +1,6 @@
 # flow-storm
 
-**WIP !!!**
-
-Tracing companion library for the [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) (A experimental Clojure and ClojureScript debugger)
+Tracing companion library for the [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) (A Clojure and ClojureScript debugger)
 
 Use this library to instrument your code.
 
@@ -15,16 +13,16 @@ Tested on jvm, browser, nodejs, react-native.
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.2.5"}}}' -m flow-storm-debugger.server
+clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.2.6"}}}' -m flow-storm-debugger.server
 ```
 And point your browser to http://localhost:7722
 
-Now add this library to your application dependencies (deps.edn, project.clj, shadow-cljs.edn, etc)
+Now add this library to your application dependencies (deps.edn, project.clj, shadow-cljs.edn, etc).
 
 Simple repl example :
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.5"}}}'
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.6"}}}'
 ```
 
 ```clojure
@@ -46,19 +44,19 @@ clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.5"}}}'
 #trace
 (defn bar []
   (let [a 10]
-    (->> (range (foo a a))
-         (map inc)
-         (filter odd?)
-         (reduce +))))
+	(->> (range (foo a a))
+		 (map inc)
+		 (filter odd?)
+		 (reduce +))))
 
 (bar)
 ```
 
-Everytime a traced "flow" executes, it will trace the execution in the debugger.
+Everytime a traced "flow** executes, it will trace the execution in the debugger.
 
 ## Notes
 
-On node js you need the npm websocket library for the library to work.
+**On node js you need the npm websocket library for the library to work!**.
 
 For instrumenting remote code (like in react-native) use :
 
