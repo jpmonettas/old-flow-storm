@@ -8,6 +8,8 @@ Tested on jvm, browser, nodejs, react-native.
 
 [![Clojars Project](https://img.shields.io/clojars/v/jpmonettas/flow-storm.svg)](https://clojars.org/jpmonettas/flow-storm)
 
+Big thanks to the [Cider](https://github.com/clojure-emacs/cider-nrepl) team for `cider.nrepl.middleware.util.instrument` since this code started as a fork of it.
+
 ## Before starting your day
 
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
