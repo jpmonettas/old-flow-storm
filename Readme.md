@@ -28,7 +28,7 @@ clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.6"}}}'
 ```
 
 ```clojure
-(require '[flow-storm.api :as fs-api)
+(require '[flow-storm.api :as fs-api])
 
 ;; Add this to your application start
 ;; or fire it once if you are working at the repl
