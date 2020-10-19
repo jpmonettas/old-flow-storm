@@ -27,7 +27,8 @@
                             :form-id form-id
                             :form-flow-id form-flow-id
                             :form (pr-str form)}
-                     args-vec (assoc :args-vec args-vec)
+                     args-vec (assoc :args-vec (binding [*print-length* (or *print-length* 50)]
+                                                 (pr-str args-vec)))
                      fn-name  (assoc :fn-name fn-name))]
     (ws-send [:flow-storm/init-trace trace-data])))
 
