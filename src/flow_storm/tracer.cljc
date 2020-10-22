@@ -63,8 +63,9 @@
   "Connects to the flow-storm debugger.
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
-  ([{:keys [host port]}]
+  ([{:keys [host port protocol]}]
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
+                                                                                               :protocol (or protocol "http:")
                                                                                                :host (or host "localhost")
                                                                                                :port (or port 7722)})]
 
