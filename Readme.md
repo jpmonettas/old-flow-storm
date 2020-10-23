@@ -24,7 +24,7 @@ Now add this library to your application dependencies (deps.edn, project.clj, sh
 Simple repl example :
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.6"}}}'
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.7"}}}'
 ```
 
 ```clojure
@@ -55,6 +55,15 @@ clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.6"}}}'
 ```
 
 Everytime a traced "flow** executes, it will trace the execution in the debugger.
+
+## Connecting to a debugger remotely 
+
+If you need to connect to a debugger instance not running in the same device as your debugged procees you can optionally provide
+`flow-storm.api/connect` the following options:
+
+- protocol Can be `:http` or `:https` (defaults to :http)
+- host (defaults to "localhost")
+- port (defaults to 7722)
 
 ## Notes
 
