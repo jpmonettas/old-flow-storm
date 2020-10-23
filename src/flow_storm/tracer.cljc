@@ -65,7 +65,7 @@
   ([] (connect nil))
   ([{:keys [host port protocol]}]
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
-                                                                                               :protocol (or protocol "http:")
+                                                                                               :protocol (or protocol :http)
                                                                                                :host (or host "localhost")
                                                                                                :port (or port 7722)})]
 
