@@ -64,10 +64,12 @@
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
   ([{:keys [host port protocol]}]
-   (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"  nil {:type :ws
-                                                                                               :protocol (or protocol :http)
-                                                                                               :host (or host "localhost")
-                                                                                               :port (or port 7722)})]
+   (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"
+                                                                                 "dummy-csrf-token" ;; to avoid warning
+                                                                                 {:type :ws
+                                                                                  :protocol (or protocol :http)
+                                                                                  :host (or host "localhost")
+                                                                                  :port (or port 7722)})]
 
      ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
      ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
