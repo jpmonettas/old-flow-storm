@@ -299,17 +299,41 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
+(defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form? compiler]}]
+  (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
+                     outer-form? (assoc :outer-form? outer-form?))
+        catch-expr (case compiler
+                     :clj `(catch Exception e#
+                             (~instrument-fn nil
+                              {:message (.getMessage e#)}
+                              ~trace-data
+                              (quote ~orig))
+                             (throw e#))
+                     :cljs `(catch :default e#
+                              (~instrument-fn nil
+                               {:message (.-message e#)}
+                               ~trace-data
+                               (quote ~orig))
+                              (throw e#)))]
+    `(try
+       (~instrument-fn ~form nil ~trace-data (quote ~orig))
+       ~catch-expr)))
+
+;; (defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form?]}]
+;;   `(~instrument-fn ~form nil
+;;     ~(cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
+;;        outer-form? (assoc :outer-form? outer-form?))
+;;     (quote ~orig)))
+ 
 (defn- maybe-instrument
   "If the form has been tagged with ::coor on its meta, then instrument it
   with trace-and-return"
-  ([form {:keys [instrument-fn form-id form-flow-id] :as ctx}]
+  ([form {:keys [form-id form-flow-id] :as ctx}]
    (let [{coor ::coor
           [_ orig] ::original-form} (meta form)]
      (cond
        coor
-       (list instrument-fn form
-             {:coor coor, :form-id form-id :form-flow-id form-flow-id}
-             `(quote ~orig))
+       (instrument-form form orig coor ctx)
 
        ;; If the form is a list and has no metadata, maybe it was
        ;; destroyed by a macro. Try guessing the extras by looking at
@@ -322,7 +346,7 @@
              ;;          extras)
              ]
          (if coor
-           (list instrument-fn form {:coor coor, :form-id form-id :form-flow-id form-flow-id} `(quote ~orig))
+           (instrument-form form orig coor ctx)
            form))
        :else form))))
 
@@ -491,7 +515,7 @@
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form. Like
   tracing the form source code, and wrapping *flow-id* dynamic bindings"
-  [{:keys [orig-form args-vec fn-name form-id form-flow-id instrument-fn on-outer-form-fn]} forms]
+  [{:keys [orig-form args-vec fn-name form-id form-flow-id on-outer-form-fn] :as ctx} forms]
   `(binding [flow-storm.tracer/*flow-id* (or flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
                                              (rand-int 10000))]
@@ -501,10 +525,7 @@
                          :fn-name ~fn-name}
       (quote ~orig-form))
 
-     (~instrument-fn
-      (do ~@forms)
-      {:coor [], :outer-form? true, :form-id ~form-id, :form-flow-id ~form-flow-id}
-      (quote ~orig-form))))
+     ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true))))
 
 ;; TODO: can this be mixed with normal fn* body instrumentation?
 (defn instrument-function-bodies [[_ & arities] ctx wrapper]
@@ -513,6 +534,10 @@
          (map (fn [[args-vec & body]]
                 (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
+(defn unwrap-form [inst-form]
+  (-> inst-form
+      second   ;; discard the try
+      second)) ;; discard the instrument-fn (trace-and-return)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For working at the repl ;;

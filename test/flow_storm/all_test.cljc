@@ -5,6 +5,22 @@
             [flow-storm.tracer :as t]
             [clojure.string :as str]))
 
+;;;;;;;;;;;;;;;;;;;;
+;; Some utilities ;;
+;;;;;;;;;;;;;;;;;;;;
+
+(defn clean-clj-fn-print [fp]
+  (if (str/starts-with? fp "#object")
+    (str/replace fp #"\s.*[a-zA-Z0-9\"\.\$]" "")
+    fp))
+
+(defn without-form-flow-id [e]
+  (update e 1 dissoc :form-flow-id))
+
+;;;;;;;;;;;
+;; Tests ;;
+;;;;;;;;;;;
+
 (fsa/trace
  (defn foo [a b]
    (+ a b (or 2 1))))
@@ -20,11 +36,6 @@
 
 (deftest basic-tracing-test
   (let [sent-events (atom [])
-        clean-clj-fn-print (fn [fp]
-                             (if (str/starts-with? fp "#object")
-                               (str/replace fp #"\s.*[a-zA-Z0-9\"\.\$]" "")
-                               fp))
-        without-form-flow-id (fn [e] (update e 1 dissoc :form-flow-id))
 
         ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
         ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
@@ -61,4 +72,60 @@
                (cond-> se
                  true without-form-flow-id
                  (contains? (second se) :result) (update-in [1 :result] clean-clj-fn-print)))
+            "A generated trace doesn't match with the expected trace")))))
+
+(defn bad-fn []
+  #?(:clj (throw (Exception. "error msg"))
+     :cljs (throw (js/Error. "error msg"))))
+
+(fsa/trace
+ (defn err-foo []
+   (->> (range 10)
+        (map (fn [i]
+               (if (= i 2)
+                 (bad-fn)
+                 i)))
+        doall)))
+
+(deftest exception-tracing-test
+  (let [sent-events (atom [])
+        obj-result? (fn [m]
+                      (and (contains? m :result)
+                           (str/starts-with? (:result m) "#object")))
+        ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
+        ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :form "(defn err-foo [] (->> (range 10) (map (fn [i] (if (= i 2) (bad-fn) i))) doall))", :args-vec "[]", :fn-name "err-foo"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :result "[stripped-object]"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 1], :result "(0 1 2 3 4 5 6 7 8 9)"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "0"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "0"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "0"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "0"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "1"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "1"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "1"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "1"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "2"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "2"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "true"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 2], :err #:error{:message "error msg"}}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :err #:error{:message "error msg"}}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2], :err #:error{:message "error msg"}}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3], :err #:error{:message "error msg"}}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [], :err #:error{:message "error msg"}, :outer-form? true}]]]
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                  rand-int (constantly 1)]
+      (let [msg (try
+                  (err-foo)
+                  #?(:clj (catch Exception e (.getMessage e))
+                     :cljs (catch :default e (.-message e))))])
+
+      (doseq [[et se] (map vector expected-traces @sent-events)]
+
+        (is (= (without-form-flow-id et)
+               (cond-> se
+                 true without-form-flow-id
+                 (obj-result? (second se)) (assoc-in [1 :result] "[stripped-object]")))
             "A generated trace doesn't match with the expected trace")))))

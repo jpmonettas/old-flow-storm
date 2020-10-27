@@ -34,13 +34,13 @@
 
 (defn trace-and-return
   "Instrumentation function. Sends the `:flow-storm/add-trace` trace and returns the result."
-  [result {:keys [coor outer-form? form-id form-flow-id]} orig-form]
+  [result err {:keys [coor outer-form? form-id form-flow-id]} orig-form]
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :form-flow-id form-flow-id
-                            :coor coor
-                            :result (binding [*print-length* (or *print-length* 50)]
-                                      (pr-str result))}
+                            :coor coor}
+                     (not err)   (assoc :result (binding [*print-length* (or *print-length* 50)] (pr-str result)))
+                     err         (assoc :err {:error/message (:message err)})
                      outer-form? (assoc :outer-form? true))]
 
     (ws-send [:flow-storm/add-trace trace-data])
