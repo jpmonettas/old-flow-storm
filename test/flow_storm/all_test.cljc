@@ -129,3 +129,22 @@
                  true without-form-flow-id
                  (obj-result? (second se)) (assoc-in [1 :result] "[stripped-object]")))
             "A generated trace doesn't match with the expected trace")))))
+
+#trace
+(defn zbar [c]
+  (+ 5 c))
+
+#ztrace
+(defn zfoo [a b]
+  (+ a b (zbar a)))
+
+(deftest zero-flow-test
+  (let [sent-events (atom [])]
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))]
+      (zfoo 42 42)
+      
+      (is (-> @sent-events first second :fixed-flow-id-starter?)
+          ":fixed-flow-id-starter? should be true on the first :flow-storm/init-trace ")
+      
+      (doseq [[_ {:keys [flow-id]}] @sent-events]
+        (is (zero? flow-id) "A zero traced flow-id is not zero.")))))

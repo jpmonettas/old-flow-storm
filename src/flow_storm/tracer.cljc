@@ -22,14 +22,15 @@
 
 (defn init-trace
   "Instrumentation function. Sends the `:flow-storm/init-trace` trace"
-  [{:keys [form-id form-flow-id args-vec fn-name]} form]
+  [{:keys [form-id form-flow-id flow-id args-vec fn-name]} form]
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :form-flow-id form-flow-id
                             :form (pr-str form)}
                      args-vec (assoc :args-vec (binding [*print-length* (or *print-length* 50)]
                                                  (pr-str args-vec)))
-                     fn-name  (assoc :fn-name fn-name))]
+                     fn-name  (assoc :fn-name fn-name)
+                     flow-id  (assoc :fixed-flow-id-starter? true))]
     (ws-send [:flow-storm/init-trace trace-data])))
 
 (defn trace-and-return

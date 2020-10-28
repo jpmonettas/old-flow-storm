@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file. This change
 ## [Unreleased]
 
 - Add exception tracing (#2)
+- Add #ztrace for tracing with flow-id 0
 
 ## 0.2.7 (2020-10-23)
 

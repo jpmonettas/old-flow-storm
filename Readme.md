@@ -54,7 +54,11 @@ clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.2.7"}}}'
 (bar)
 ```
 
-Everytime a traced "flow** executes, it will trace the execution in the debugger.
+Everytime a traced **flow** executes, it will trace the execution in the debugger.
+
+You can use **#ztrace** instead of **#trace** to make the flow-id always be 0. This is useful
+for incrementaly trying things on a repl, and stopping the debugger from creating a different flow each time
+you run the expression.
 
 ## Connecting to a debugger remotely 
 

@@ -299,8 +299,8 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
-(defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form? compiler]}]
-  (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
+(defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form? compiler flow-id] :as ctx}]
+  (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id :flow-id flow-id}
                      outer-form? (assoc :outer-form? outer-form?))
         catch-expr (case compiler
                      :clj `(catch Exception e#
@@ -515,11 +515,13 @@
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form. Like
   tracing the form source code, and wrapping *flow-id* dynamic bindings"
-  [{:keys [orig-form args-vec fn-name form-id form-flow-id on-outer-form-fn] :as ctx} forms]
-  `(binding [flow-storm.tracer/*flow-id* (or flow-storm.tracer/*flow-id*
+  [{:keys [orig-form args-vec fn-name form-id form-flow-id flow-id on-outer-form-fn] :as ctx} forms]
+  `(binding [flow-storm.tracer/*flow-id* (or ~flow-id
+                                             flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
                                              (rand-int 10000))]
      (~on-outer-form-fn {:form-id ~form-id
+                         :flow-id ~flow-id
                          :form-flow-id ~form-flow-id
                          :args-vec ~args-vec
                          :fn-name ~fn-name}
