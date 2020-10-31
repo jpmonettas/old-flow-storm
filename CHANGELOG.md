@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+## 0.3.1 (2020-10-31)
+
 - Add exception names in error messages
 - Fix #9, no tracing inside case in ClojureScript
 
