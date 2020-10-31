@@ -273,9 +273,14 @@
                                                 args)))
             '#{catch} `(~@(take 2 args)
                         ~@(instrument-coll (drop 2 args) ctx))
-            ;; Anyone know what a2 and a3 represent? They were always 0 on my tests.
-            '#{case*} (let [[a1 a2 a3 a4 a5 & ar] args]
-                        `(~a1 ~a2 ~a3 ~(instrument a4 ctx) ~(instrument-case-map a5 ctx) ~@ar)))
+
+            ;; case* special form is implemented differently in clojure and clojurescript
+            '#{case*} (case (:compiler ctx)
+                        :clj (let [[a1 a2 a3 a4 a5 & ar] args]
+                               ;; Anyone know what a2 and a3 represent? They were always 0 on my tests.
+                               `(~a1 ~a2 ~a3 ~(instrument a4 ctx) ~(instrument-case-map a5 ctx) ~@ar))
+                        :cljs (let [[a1 left-vec right-vec else] args]
+                                `(~a1 ~left-vec ~(instrument-coll right-vec ctx) ~(instrument else ctx)))))
           (catch Exception e
             (binding [*print-length* 4
                       *print-level*  2]

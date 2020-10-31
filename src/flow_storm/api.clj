@@ -45,7 +45,9 @@
        ;; Uncomment to debug
        ;; Printing on the *err* stream is important since
        ;; printing on standard output messes  with clojurescript macroexpansion
-       #_(binding [*out* *err*] (pp/pprint inst-code'))
+       #_(binding [*out* *err*]
+         (pp/pprint (i/macroexpand-all form))
+         (pp/pprint inst-code'))
 
        inst-code'))))
 

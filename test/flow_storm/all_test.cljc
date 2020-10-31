@@ -150,3 +150,24 @@
       
       (doseq [[_ {:keys [flow-id]}] @sent-events]
         (is (zero? flow-id) "A zero traced flow-id is not zero.")))))
+
+(deftest case-test
+  (let [sent-events (atom [])
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :form "(case :val1 :val1 (+ 1 2) :val2 0)"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [3], :result "3"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3", :outer-form? true}]]]
+
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                  rand-int (constantly 1)]
+
+      ;; testing https://github.com/jpmonettas/flow-storm/issues/9
+      #trace (case :val1
+               :val1 (+ 1 2)
+               :val2 0)
+
+      (doseq [[et se] (map vector expected-traces @sent-events)]
+
+        (is (= (without-form-flow-id et)
+               (without-form-flow-id se))
+            "A generated trace doesn't match with the expected trace")))))
