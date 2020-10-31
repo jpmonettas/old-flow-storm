@@ -305,13 +305,13 @@
         catch-expr (case compiler
                      :clj `(catch Exception e#
                              (~instrument-fn nil
-                              {:message (.getMessage e#)}
+                              {:message (.toString e#)}
                               ~trace-data
                               (quote ~orig))
                              (throw e#))
                      :cljs `(catch :default e#
                               (~instrument-fn nil
-                               {:message (.-message e#)}
+                               {:message (.toString e#)}
                                ~trace-data
                                (quote ~orig))
                               (throw e#)))]
