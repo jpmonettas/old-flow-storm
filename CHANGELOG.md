@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+- Fix #5 Instrumented code of [& args] doesn't compile
+
 ## 0.3.1 (2020-10-31)
 
 - Add exception names in error messages
