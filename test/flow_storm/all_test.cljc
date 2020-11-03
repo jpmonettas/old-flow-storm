@@ -33,7 +33,6 @@
           (filter odd?)
           (reduce +)))))
 
-
 (deftest basic-tracing-test
   (let [sent-events (atom [])
 
@@ -64,6 +63,7 @@
     (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
       (bar)
+
       (doseq [[et se] (map vector expected-traces @sent-events)]
         (is (-> se second :form-flow-id)
             "Send event doesn't contain a :form-flow-lid")
@@ -72,6 +72,44 @@
                (cond-> se
                  true without-form-flow-id
                  (contains? (second se) :result) (update-in [1 :result] clean-clj-fn-print)))
+            "A generated trace doesn't match with the expected trace")))))
+
+(defmulti multi-foo :type)
+
+#trace
+(defmethod multi-foo :square [{:keys [n]}]
+  (* n n))
+
+#trace
+(defmethod multi-foo :twice [{:keys [n]}]
+  (* 2 n))
+
+(deftest multimethods-trace-test
+  (let [sent-events (atom [])
+
+        ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
+        ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :form "(defmethod multi-foo :square [{:keys [n]}] (* n n))", :args-vec "[{:type :square, :n 5}]", :fn-name "multi-foo"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor nil, :symbol "n", :value "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 1], :result "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 2], :result "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4], :result "25"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [], :result "25", :outer-form? true}]
+
+                         [:flow-storm/init-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :form "(defmethod multi-foo :twice [{:keys [n]}] (* 2 n))", :args-vec "[{:type :twice, :n 5}]", :fn-name "multi-foo"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor nil, :symbol "n", :value "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4 2], :result "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4], :result "10"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [], :result "10", :outer-form? true}]]]
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                  rand-int (constantly 1)]
+      
+      (multi-foo {:type :square :n 5})
+      (multi-foo {:type :twice :n 5})
+      
+      (doseq [[et se] (map vector expected-traces @sent-events)]
+        (is (= (without-form-flow-id et)
+               (without-form-flow-id se))
             "A generated trace doesn't match with the expected trace")))))
 
 (defn bad-fn []

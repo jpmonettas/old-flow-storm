@@ -507,17 +507,6 @@
       (instrument ctx)
       (strip-instrumentation-meta)))
 
-(defn fn-def-form?
-  "Returns true if the form defines a fn.
-  Like (def fname (fn* [] ...))"
-  [form]
-  (when (and (seq? form)
-             (= (count form) 3)
-             (= 'def (first form)))
-    (let [[_ _ x] form]
-      (and (seq? x)
-           (= (first x) 'fn*)))))
-
 (defn remove-&-symb [v]
   (into [] (keep #(when-not (= % '&) %) v)))
 
@@ -534,7 +523,7 @@
                          :form-flow-id ~form-flow-id
                          ;; remove the first level & symb from args-vec or
                          ;; the expansion will not compile
-                         :args-vec ~(remove-&-symb args-vec)
+                         :args-vec ~(when args-vec (remove-&-symb args-vec))
                          :fn-name ~fn-name}
       (quote ~orig-form))
 
@@ -547,10 +536,87 @@
          (map (fn [[args-vec & body]]
                 (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
-(defn unwrap-form [inst-form]
+(defn instrument-all [form ctx]
+  (-> form
+      (tag-form-recursively) ;; tag all forms adding ::i/coor
+      (instrument-tagged-code ctx)))
+
+(defn unwrap-instrumentation [inst-form]
   (-> inst-form
       second   ;; discard the try
       second)) ;; discard the instrument-fn (trace-and-return)
+
+(defn outer-form-type [outer-form {:keys [compiler]}]
+  (when (seq? outer-form)
+    (cond
+
+      (and (= (count outer-form) 3)
+           (= 'def (first outer-form))
+           (let [[_ _ x] outer-form]
+             (and (seq? x)
+                  (= (first x) 'fn*))))
+      :defn
+
+      (or (and (= compiler :clj)
+               (= (count outer-form) 5)
+               (= (nth outer-form 2) 'clojure.core/addMethod))
+          (and (= compiler :cljs)
+               (= (count outer-form) 4)
+               (= (first outer-form) 'cljs.core/-add-method)))
+      :defmethod)))
+
+(defn parse-defn-expansion [defn-expanded-form]
+  ;; (def my-fn (fn* ([])))
+  (let [[_ fn-name fn-body] defn-expanded-form]
+    {:fn-name fn-name
+     :fn-body fn-body}))
+
+(defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
+  (let [[mname mval mbody] (case compiler
+                             
+                             ;; (. my-method clojure.core/addMethod :bla (fn* [...] ...))
+                             :clj (let [[_ mname _ mval mbody] defmethod-expanded-form]
+                                    [mname mval mbody])
+
+                             ;; (cljs.core/-add-method my-method :bla (fn* [...] ...))
+                             :cljs (let [[_ mname mval mbody] defmethod-expanded-form]
+                                     [mname mval mbody]))]
+    {:method-name mname
+     :method-val mval
+     :method-body mbody}))
+
+(defn fix-outer-form-instrumentation [form orig-form {:keys [compiler] :as ctx}]
+  (let [outer-form (unwrap-instrumentation form)
+        instrument-bodies (fn [fn-name fn-body]
+                            (instrument-function-bodies
+                             fn-body
+                             (assoc ctx
+                                    :orig-form orig-form
+                                    :fn-name (name fn-name))
+                             instrument-outer-forms))]
+    (case (outer-form-type outer-form ctx)
+      :defn (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
+              ;; instrument all fn bodies (multy arities) with our outer form tracing
+              `(def ~fn-name ~(instrument-bodies fn-name fn-body)))
+      
+      :defmethod (let [{:keys [method-name method-val method-body]} (parse-defmethod-expansion outer-form ctx)]
+                   (case compiler
+                     :clj `(. ~method-name clojure.core/addMethod ~method-val ~(instrument-bodies method-name method-body))
+                     :cljs `(cljs.core/-add-method ~method-name  ~method-val ~(instrument-bodies method-name method-body))))
+
+      ;; if we are here means it is not a fn defining form
+      (instrument-outer-forms (assoc ctx :orig-form orig-form) (list form)))))
+
+(defn redefine-vars [inst-form var-symb {:keys [compiler] :as ctx}]
+  (let [outer-form (unwrap-instrumentation inst-form)]
+    (if (= (outer-form-type outer-form ctx) :defn)
+      
+      (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
+        (case compiler
+          :clj  `(alter-var-root (var ~var-symb) (constantly ~fn-body))
+          :cljs `(set! ~var-symb ~fn-body)))
+      
+      (println "Flow-storm only support fn tracing now. Multimethods and other kind of fn definitions will be implemented in the future."))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For working at the repl ;;

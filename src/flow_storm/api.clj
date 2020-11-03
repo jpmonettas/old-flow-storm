@@ -3,7 +3,9 @@
   Provides functionality to connect to the debugger and instrument forms."
   (:require [flow-storm.instrument :as i]
             [flow-storm.tracer :as t]
-            [clojure.pprint :as pp]))
+            [clojure.pprint :as pp]
+            [clojure.repl :as clj.repl]
+            [cljs.repl :as cljs.repl]))
 
 (def connect
   "Connects to flow-storm debugger.
@@ -12,47 +14,70 @@
   Optionally you can provide a map with :host and :port keys."
   t/connect)
 
+(defn- initial-ctx [form env]
+  (let [form-id (hash form)
+        form-flow-id (rand-int 100000)]
+    {:instrument-fn    'flow-storm.tracer/trace-and-return
+     :on-bind-fn       'flow-storm.tracer/bound-trace
+     :on-outer-form-fn 'flow-storm.tracer/init-trace
+     :compiler         (i/target-from-env env)
+     :form-id          form-id
+     :form-flow-id     form-flow-id}))
+
+(defn- pprint-on-err [x]
+  (binding [*out* *err*] (pp/pprint x)))
+
 (defmacro trace
   "Recursively instrument a form for tracing."
   ([form] `(trace nil ~form)) ;; need to do this so multiarity macros work
   ([flow-id form]
    (binding [i/*environment* &env]
-     (let [form-id (hash form)
-           form-flow-id (rand-int 100000)
-           ctx {:instrument-fn    'flow-storm.tracer/trace-and-return
-                :on-bind-fn       'flow-storm.tracer/bound-trace
-                :on-outer-form-fn 'flow-storm.tracer/init-trace
-                :compiler         (i/target-from-env &env)
-                :flow-id          flow-id
-                :form-id          form-id
-                :form-flow-id     form-flow-id}
-           
+     (let [ctx (-> (initial-ctx form &env)
+                   (assoc :flow-id flow-id))
            inst-code (-> form
-                         (i/tag-form-recursively) ;; tag all forms adding ::i/coor
-                         (i/instrument-tagged-code ctx))
-           ;; this is a super hacky way of figuring out if the outer instrumented form is a defn
-           ;; we are doing this because if it is, we need to "un-instrument it" and instrument it again
-           ;; a little different
-           inst-code' (if (i/fn-def-form? (i/unwrap-form inst-code))
-                        (let [[_ fn-name fn-form] (i/unwrap-form inst-code)]
-                          (list 'def fn-name (i/instrument-function-bodies fn-form
-                                                                           (assoc ctx
-                                                                                  :orig-form form
-                                                                                  :fn-name (name fn-name))
-                                                                           i/instrument-outer-forms)))
-                        (i/instrument-outer-forms (assoc ctx :orig-form form) (list inst-code)))]
+                         (i/instrument-all ctx)
+                         (i/fix-outer-form-instrumentation form ctx))]
 
        ;; Uncomment to debug
        ;; Printing on the *err* stream is important since
        ;; printing on standard output messes  with clojurescript macroexpansion
-       #_(binding [*out* *err*]
-         (pp/pprint (i/macroexpand-all form))
-         (pp/pprint inst-code'))
+       #_(pprint-on-err (i/macroexpand-all form))
+       #_(pprint-on-err inst-code')
+       
+       inst-code))))
 
-       inst-code'))))
+(defmacro trace-var [var-symb]
+  (binding [i/*environment* &env]
+    (let [compiler (i/target-from-env &env)
+          form (read-string (case compiler
+                              :clj  (clj.repl/source-fn var-symb)
+                              :cljs (cljs.repl/source-fn &env var-symb)))
+          ctx (initial-ctx form &env)
+          inst-code (-> form
+                        (i/instrument-all ctx)
+                        (i/redefine-vars var-symb ctx))]
+      inst-code)))
 
 (defn read-trace-tag [form]
   `(flow-storm.api/trace ~form))
 
 (defn read-ztrace-tag [form]
   `(flow-storm.api/trace 0 ~form))
+
+(comment
+  (connect)
+  (trace-var clojure.core/map)
+  (map inc (range 1 2 3))
+
+  (macroexpand '(trace (defn foo [])))
+  (do
+    (require '[flow-storm.api :as fsa])
+    (fsa/connect)
+
+    (fsa/trace-var cljs.core/odd?)
+    (fsa/trace-var cljs.core/map)
+    (fsa/trace-var cljs.core/take-last)
+    (macroexpand-1 '(fsa/trace-var cljs.core/some))
+    )
+  
+  )
