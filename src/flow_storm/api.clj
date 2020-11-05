@@ -14,6 +14,8 @@
   Optionally you can provide a map with :host and :port keys."
   t/connect)
 
+(def traced-vars-orig-fns (atom {}))
+
 (defn- initial-ctx [form env]
   (let [form-id (hash form)
         form-flow-id (rand-int 100000)]
@@ -57,6 +59,16 @@
                         (i/instrument-all ctx)
                         (i/redefine-vars var-symb form ctx))]
       inst-code)))
+
+(defmacro untrace-var [var-symb]
+  (let [compiler (i/target-from-env &env)]
+    (case compiler
+      :clj `(do
+              (alter-var-root (var ~var-symb) (constantly (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb))))
+              (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb)))
+      :cljs `(do
+               (set! ~var-symb (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb)))
+               (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb))))))
 
 (defn read-trace-tag [form]
   `(flow-storm.api/trace ~form))

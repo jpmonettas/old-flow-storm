@@ -7,6 +7,8 @@
 ;;    - connect (function)
 ;;    - trace   (macro)
 
+(def traced-vars-orig-fns (atom {}))
+
 ;; here we just define connect and require the trace macro from
 ;; the clojure ns
 

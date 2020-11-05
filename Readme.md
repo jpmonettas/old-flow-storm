@@ -65,7 +65,7 @@ You can use **#ztrace** instead of **#trace** to make the flow-id always be 0. T
 for incrementaly trying things at the repl, and stopping the debugger from creating a different flow tab each time
 you run the expression.
 
-## Connecting to a debugger remotely 
+## Connecting to a debugger remotely
 
 If you need to connect to a debugger instance not running in the same device as your debugged procees you can optionally provide
 `flow-storm.api/connect` the following options:
@@ -73,6 +73,25 @@ If you need to connect to a debugger instance not running in the same device as 
 - protocol Can be `:http` or `:https` (defaults to :http)
 - host (defaults to "localhost")
 - port (defaults to 7722)
+
+## Instrumenting library code with trace-var
+
+Currently tracing library code is a little more involved than I like, but couldn't figure out a better way that is supported in both Clojure and ClojureScript yet.
+
+Let's say you want to trace the clojure.core/odd? function. You would have to :
+
+```clojure
+user> (in-ns 'clojure.core)
+clojure.core> (flow-storm.api/trace-var 'odd?) ;; You need to run trace-var inside the namespace where the var you are trying to instrument is defined
+clojure.core> (in-ns 'user)
+user> (odd? 5) ;; This will generate traces
+```
+
+**Important Note: be carefull to not instrument a function that is being continuously called by your environment**
+
+For example if you try to instrument `cljs.core/map` which is constantly being called by shadow-cljs repl it will generate a bunch of traces you are probably not interested in.
+
+Repeat the same procedure but with `flow-storm.api/untrace-var` to replace the var with the original function version.
 
 ## Notes
 

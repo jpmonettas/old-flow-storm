@@ -671,8 +671,12 @@
                             :fn-name (name fn-name))
                      instrument-outer-forms)]
         (case compiler
-          :clj  `(alter-var-root (var ~var-symb) (constantly ~fn-body))
-          :cljs `(set! ~var-symb ~fn-body)))
+          :clj  `(do
+                   (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
+                   (alter-var-root (var ~var-symb) (constantly ~fn-body)))
+          :cljs `(do
+                   (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
+                   (set! ~var-symb ~fn-body))))
 
       (do
         (println "Flow-storm only support fn tracing now. Multimethods and other kind of fn definitions will be implemented in the future.")
