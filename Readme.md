@@ -76,15 +76,29 @@ If you need to connect to a debugger instance not running in the same device as 
 
 ## Instrumenting library code with trace-var
 
-Currently tracing library code is a little more involved than I like, but couldn't figure out a better way that is supported in both Clojure and ClojureScript yet.
+Tracing library code in Clojure is pretty straight forward, just use `flow-storm.api/trace-var`.
 
 Let's say you want to trace the clojure.core/odd? function. You would have to :
 
 ```clojure
-user> (in-ns 'clojure.core)
-clojure.core> (flow-storm.api/trace-var 'odd?) ;; You need to run trace-var inside the namespace where the var you are trying to instrument is defined
-clojure.core> (in-ns 'user)
+user> (fsa/trace-var clojure.core/odd?)
 user> (odd? 5) ;; This will generate traces
+true
+user> (fsa/untrace-var clojure.core/odd?)
+user> (odd? 5) ;; This will be the original function again
+true
+
+```
+
+Currently tracing library code in ClojureScript is a little more involved than I like, but couldn't figure out a better way yet.
+
+Let's say you want to trace the cljs.core/odd? function. You would have to :
+
+```clojure
+cljs.user> (in-ns 'cljs.core)
+cljs.core> (flow-storm.api/trace-var odd?) ;; You need to run trace-var inside the namespace where the var you are trying to instrument is defined
+cljs.core> (in-ns 'cljs.user)
+cljs.user> (odd? 5) ;; This will generate traces
 ```
 
 **Important Note: be carefull to not instrument a function that is being continuously called by your environment**

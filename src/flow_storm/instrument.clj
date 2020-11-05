@@ -669,11 +669,13 @@
                      (assoc ctx
                             :orig-form orig-form
                             :fn-name (name fn-name))
-                     instrument-outer-forms)]
+                     instrument-outer-forms)
+            var-ns (when-let [var-ns (namespace var-symb)] (symbol var-ns))
+            var-name (symbol (name var-symb))]
         (case compiler
-          :clj  `(do
+          :clj  `(binding [*ns* (find-ns '~var-ns)]
                    (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
-                   (alter-var-root (var ~var-symb) (constantly ~fn-body)))
+                   (intern '~var-ns '~var-name (eval '~fn-body)))
           :cljs `(do
                    (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
                    (set! ~var-symb ~fn-body))))

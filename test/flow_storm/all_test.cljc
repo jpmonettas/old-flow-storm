@@ -3,7 +3,8 @@
             [flow-storm.api :as fsa]
             [clojure.test :refer [deftest is testing]]
             [flow-storm.tracer :as t]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            #?(:clj [clojure.java.shell :as shell])))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;; Some utilities ;;
@@ -247,38 +248,28 @@
 ;; trace/untrace var test can only be done in clojure since we can't change namespaces with in-ns in ClojureScript
 #?(:clj
    (deftest trace-var-test
-     (let [sent-events (atom [])
-           expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :form "(defn odd? \"Returns true if n is odd, throws an exception if n is not an integer\" {:added \"1.0\", :static true} [n] (not (even? n)))", :args-vec "[5]", :fn-name "odd?"}]
-                            [:flow-storm/add-bind-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :coor nil, :symbol "n", :value "5"}]
-                            [:flow-storm/add-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :coor [5 1 1], :result "5"}]
-                            [:flow-storm/add-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :coor [5 1], :result "false"}]
-                            [:flow-storm/add-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :coor [5], :result "true"}]
-                            [:flow-storm/add-trace {:flow-id 1, :form-id 862665017, :form-flow-id 58467, :coor [], :result "true", :outer-form? true}]]]
+     (let [sent-events (atom [])]
 
        (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
                      rand-int (constantly 1)]
 
          (testing "Instrumenting a var with trace-var works correctly"
-           (in-ns 'clojure.core)
-           (fsa/trace-var odd?)
-           (in-ns 'flow-storm.all-test)
 
-           (is (= (odd? 5) true)
-               "Instrumented odd? fn doesn't work correctly after trace-var")
+           (fsa/trace-var clojure.java.shell/sh)
+           
+           (is (= (:exit (shell/sh "ls")) 0)
+               "Instrumented clojure.java.shell/sh fn doesn't work correctly after trace-var")
 
-           (doseq [[et se] (map vector expected-traces @sent-events)]
-             (is (= (without-form-flow-id et)
-                    (without-form-flow-id se))
-                 "A generated trace doesn't match with the expected trace")))
+           (is (= (count @sent-events) 47)
+               "Calling clojure.java.shell/sh didn't generate the corret trace count"))
 
          (reset! sent-events [])
 
          (testing "Un-instrumenting a var with untrace-var works correctly"
-           (in-ns 'clojure.core)
-           (fsa/untrace-var odd?)
-           (in-ns 'flow-storm.all-test)
-
-           (is (= (odd? 5) true)
-               "We didn't return the odd? var to its original implementation after untrace-var")
+           
+           (fsa/untrace-var clojure.java.shell/sh)
+           
+           (is (= (:exit (shell/sh "ls")) 0)
+               "We didn't return the clojure.java.shell/sh var to its original implementation after untrace-var")
 
            (is (empty? @sent-events)))))))

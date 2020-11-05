@@ -51,21 +51,28 @@
 (defmacro trace-var [var-symb]
   (binding [i/*environment* &env]
     (let [compiler (i/target-from-env &env)
-          form (read-string (case compiler
-                              :clj  (clj.repl/source-fn var-symb)
-                              :cljs (cljs.repl/source-fn &env var-symb)))
-          ctx (initial-ctx form &env)
-          inst-code (-> form
-                        (i/instrument-all ctx)
-                        (i/redefine-vars var-symb form ctx))]
-      inst-code)))
+          form (some-> (case compiler
+                         :clj  (clj.repl/source-fn var-symb)
+                         :cljs (cljs.repl/source-fn &env var-symb))
+                       read-string)]
+      (if form
+        (let [ctx (initial-ctx form &env)
+              inst-code (-> form
+                            (i/instrument-all ctx)
+                            (i/redefine-vars var-symb form ctx))]
+          inst-code)
+
+        (println "Couldn't find source for " var-symb)))))
 
 (defmacro untrace-var [var-symb]
-  (let [compiler (i/target-from-env &env)]
+  (let [compiler (i/target-from-env &env)
+        var-ns (when-let [vns (namespace var-symb)] (symbol vns))]
     (case compiler
-      :clj `(do
+      :clj `(let [current-ns# (ns-name *ns*)]
+              (in-ns (quote ~var-ns))
               (alter-var-root (var ~var-symb) (constantly (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb))))
-              (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb)))
+              (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb))
+              (in-ns current-ns#))
       :cljs `(do
                (set! ~var-symb (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb)))
                (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb))))))
@@ -76,20 +83,3 @@
 (defn read-ztrace-tag [form]
   `(flow-storm.api/trace 0 ~form))
 
-(comment
-  (connect)
-  (trace-var clojure.core/map)
-  (map inc (range 1 2 3))
-
-  (macroexpand '(trace (defn foo [])))
-  (do
-    (require '[flow-storm.api :as fsa])
-    (fsa/connect)
-
-    (fsa/trace-var cljs.core/odd?)
-    (fsa/trace-var cljs.core/map)
-    (fsa/trace-var cljs.core/take-last)
-    (macroexpand-1 '(fsa/trace-var cljs.core/some))
-    )
-
-  )
