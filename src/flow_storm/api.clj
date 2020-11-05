@@ -43,7 +43,7 @@
        ;; printing on standard output messes  with clojurescript macroexpansion
        #_(pprint-on-err (i/macroexpand-all form))
        #_(pprint-on-err inst-code')
-       
+
        inst-code))))
 
 (defmacro trace-var [var-symb]
@@ -55,7 +55,7 @@
           ctx (initial-ctx form &env)
           inst-code (-> form
                         (i/instrument-all ctx)
-                        (i/redefine-vars var-symb ctx))]
+                        (i/redefine-vars var-symb form ctx))]
       inst-code)))
 
 (defn read-trace-tag [form]
@@ -79,5 +79,5 @@
     (fsa/trace-var cljs.core/take-last)
     (macroexpand-1 '(fsa/trace-var cljs.core/some))
     )
-  
+
   )

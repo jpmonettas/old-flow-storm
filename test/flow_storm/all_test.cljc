@@ -103,10 +103,43 @@
                          [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [], :result "10", :outer-form? true}]]]
     (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
-      
+
       (multi-foo {:type :square :n 5})
       (multi-foo {:type :twice :n 5})
-      
+
+      (doseq [[et se] (map vector expected-traces @sent-events)]
+        (is (= (without-form-flow-id et)
+               (without-form-flow-id se))
+            "A generated trace doesn't match with the expected trace")))))
+
+#trace
+(defn multi-arity-foo
+  ([a] (multi-arity-foo a 10))
+  ([a b] (+ a b)))
+
+(deftest multi-arity-test
+  (let [sent-events (atom [])
+
+        ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
+        ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5]", :fn-name "multi-arity-foo"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "a", :value "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1 1], :result "5"}]
+                         [:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5 10]", :fn-name "multi-arity-foo"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "a", :value "5"}]
+                         [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "b", :value "10"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 1], :result "5"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 2], :result "10"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1], :result "15"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1], :result "15"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true}]]]
+
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                  rand-int (constantly 1)]
+
+      (multi-arity-foo 5)
+
       (doseq [[et se] (map vector expected-traces @sent-events)]
         (is (= (without-form-flow-id et)
                (without-form-flow-id se))
@@ -182,10 +215,10 @@
   (let [sent-events (atom [])]
     (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))]
       (zfoo 42 42)
-      
+
       (is (-> @sent-events first second :fixed-flow-id-starter?)
           ":fixed-flow-id-starter? should be true on the first :flow-storm/init-trace ")
-      
+
       (doseq [[_ {:keys [flow-id]}] @sent-events]
         (is (zero? flow-id) "A zero traced flow-id is not zero.")))))
 

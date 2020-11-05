@@ -90,7 +90,6 @@
                               ;; Without this, `macroexpand-all`
                               ;; throws if called on `defrecords`.
                               (try (let [r (normalized-macroexpand form)]
-                                     ;; TODO: change here
                                      r)
                                    (catch ClassNotFoundException e form))
                               form))]
@@ -330,7 +329,7 @@
 ;;     ~(cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
 ;;        outer-form? (assoc :outer-form? outer-form?))
 ;;     (quote ~orig)))
- 
+
 (defn- maybe-instrument
   "If the form has been tagged with ::coor on its meta, then instrument it
   with trace-and-return"
@@ -530,21 +529,68 @@
      ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true))))
 
 ;; TODO: can this be mixed with normal fn* body instrumentation?
-(defn instrument-function-bodies [[_ & arities] ctx wrapper]
+(defn instrument-function-bodies [[_ & arities :as form] ctx wrapper]
   `(fn*
     ~@(->> arities
-         (map (fn [[args-vec & body]]
-                (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
+           (map (fn [[args-vec & body]]
+                  (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
 (defn instrument-all [form ctx]
-  (-> form
-      (tag-form-recursively) ;; tag all forms adding ::i/coor
-      (instrument-tagged-code ctx)))
+  (let [inst-code (-> form
+                      (tag-form-recursively) ;; tag all forms adding ::i/coor
+                      (instrument-tagged-code ctx))]
+    inst-code))
 
 (defn unwrap-instrumentation [inst-form]
   (-> inst-form
       second   ;; discard the try
       second)) ;; discard the instrument-fn (trace-and-return)
+
+;; ClojureScript multi arity defn expansion is much more involved than
+;; a clojure one
+#_(do
+ (def
+  multi-arity-foo
+  (cljs.core/fn
+   [var_args]
+   (cljs.core/case
+    ...
+    )))
+
+ (set!
+  (. multi-arity-foo -cljs$core$IFn$_invoke$arity$1)
+  (fn* ([a] (multi-arity-foo a 10))))
+
+ (set!
+  (. multi-arity-foo -cljs$core$IFn$_invoke$arity$2)
+  (fn* ([a b] (+ a b))))
+
+ (set! (. multi-arity-foo -cljs$lang$maxFixedArity) 2)
+
+ nil)
+
+(defn cljs-multi-arity-defn? [[x1 & x2]]
+  (when (= x1 'do)
+    (let [[xdef & xset] (keep first x2)]
+      (and (= xdef 'def)
+           (pos? (count xset))
+           (every? #(= 'set! %) xset)))))
+
+(defn instrument-cljs-multi-arity-outer-form [[_ xdef & xsets] orig-form ctx]
+  (let [fn-name (second xdef)
+        inst-sets-forms (keep (fn [[_ xarity fn-body]]
+                           (when (and (seq? fn-body) (= (first fn-body) 'fn*))
+                             (let [inst-bodies (instrument-function-bodies
+                                                fn-body
+                                                (assoc ctx
+                                                       :orig-form orig-form
+                                                       :fn-name (name fn-name))
+
+                                                instrument-outer-forms)]
+                               (list 'set! xarity inst-bodies))))
+                              xsets)
+        inst-code `(do ~xdef ~@inst-sets-forms)]
+    inst-code))
 
 (defn outer-form-type [outer-form {:keys [compiler]}]
   (when (seq? outer-form)
@@ -556,6 +602,10 @@
              (and (seq? x)
                   (= (first x) 'fn*))))
       :defn
+
+      (and (= compiler :cljs)
+           (cljs-multi-arity-defn? outer-form))
+      :defn-cljs-multi-arity
 
       (or (and (= compiler :clj)
                (= (count outer-form) 5)
@@ -573,7 +623,7 @@
 
 (defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
   (let [[mname mval mbody] (case compiler
-                             
+
                              ;; (. my-method clojure.core/addMethod :bla (fn* [...] ...))
                              :clj (let [[_ mname _ mval mbody] defmethod-expanded-form]
                                     [mname mval mbody])
@@ -598,7 +648,9 @@
       :defn (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
               ;; instrument all fn bodies (multy arities) with our outer form tracing
               `(def ~fn-name ~(instrument-bodies fn-name fn-body)))
-      
+
+      :defn-cljs-multi-arity (instrument-cljs-multi-arity-outer-form outer-form orig-form ctx)
+
       :defmethod (let [{:keys [method-name method-val method-body]} (parse-defmethod-expansion outer-form ctx)]
                    (case compiler
                      :clj `(. ~method-name clojure.core/addMethod ~method-val ~(instrument-bodies method-name method-body))
@@ -607,16 +659,25 @@
       ;; if we are here means it is not a fn defining form
       (instrument-outer-forms (assoc ctx :orig-form orig-form) (list form)))))
 
-(defn redefine-vars [inst-form var-symb {:keys [compiler] :as ctx}]
+(defn redefine-vars [inst-form var-symb orig-form {:keys [compiler] :as ctx}]
   (let [outer-form (unwrap-instrumentation inst-form)]
     (if (= (outer-form-type outer-form ctx) :defn)
-      
-      (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
+
+      (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)
+            fn-body (instrument-function-bodies
+                     fn-body
+                     (assoc ctx
+                            :orig-form orig-form
+                            :fn-name (name fn-name))
+                     instrument-outer-forms)]
         (case compiler
           :clj  `(alter-var-root (var ~var-symb) (constantly ~fn-body))
           :cljs `(set! ~var-symb ~fn-body)))
-      
-      (println "Flow-storm only support fn tracing now. Multimethods and other kind of fn definitions will be implemented in the future."))))
+
+      (do
+        (println "Flow-storm only support fn tracing now. Multimethods and other kind of fn definitions will be implemented in the future.")
+        (println "Outer-form:" )
+        (prn outer-form)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For working at the repl ;;
