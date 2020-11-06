@@ -29,7 +29,7 @@ Now add this library to your application dependencies (deps.edn, project.clj, sh
 Simple repl example :
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.3.1"}}}'
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.3.2"}}}'
 ```
 
 ```clojure

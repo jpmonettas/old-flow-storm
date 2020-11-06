@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+## 0.3.2 (2020-11-06)
+
+- Fix multi arity fn support for cljs
+- Multimethods trace support
+- Implements trace-var, untrace-var 
 - Fix #5 Instrumented code of [& args] doesn't compile
 
 ## 0.3.1 (2020-10-31)
