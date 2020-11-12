@@ -1,6 +1,8 @@
 (ns flow-storm.tracer
   (:require  [taoensso.sente  :as sente]
-             [clojure.core.async :refer [take!]]))
+             [clojure.core.async :refer [take!]]
+             [editscript.core :as edit.core]
+             [editscript.edit :as edit.edit]))
 
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
@@ -59,6 +61,34 @@
                     :value (binding [*print-length* (or *print-length* 50)]
                              (pr-str val))}]
     (ws-send [:flow-storm/add-bind-trace trace-data])))
+
+(defn ref-init-trace
+  "Sends the `:flow-storm/ref-init-trace` trace"
+  [ref-id ref-name init-val]
+  (let [trace-data {:ref-id ref-id
+                    :ref-name ref-name
+                    :init-val init-val}]
+    (ws-send [:flow-storm/ref-init-trace trace-data])))
+
+(defn ref-trace
+  "Sends the `:flow-storm/ref-trace` trace"
+  [ref-id patch]
+  (let [trace-data {:ref-id ref-id
+                    :patch patch}]
+    (ws-send [:flow-storm/ref-trace trace-data])))
+
+(defn trace-ref [ref-name ref]
+  (let [ref-id (hash ref)]
+    
+    (ref-init-trace ref-id ref-name @ref)
+    
+    (add-watch ref :flow-storm
+               (fn [_ _ old-value new-value] 
+                 (let [patch (edit.core/diff old-value new-value)]
+                   (ref-trace ref-id (edit.edit/get-edits patch)))))))
+
+(defn untrace-ref [ref]
+  (remove-watch ref :flow-storm))
 
 (defn connect
   "Connects to the flow-storm debugger.

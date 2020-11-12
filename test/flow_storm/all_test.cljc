@@ -4,6 +4,8 @@
             [clojure.test :refer [deftest is testing]]
             [flow-storm.tracer :as t]
             [clojure.string :as str]
+            [editscript.core :as edit.core]
+            [editscript.edit :as edit.edit]
             #?(:clj [clojure.java.shell :as shell])))
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -15,8 +17,8 @@
     (str/replace fp #"\s.*[a-zA-Z0-9\"\.\$]" "")
     fp))
 
-(defn without-form-flow-id [e]
-  (update e 1 dissoc :form-flow-id))
+(defn event-data-without [e k]
+  (update e 1 dissoc k))
 
 ;;;;;;;;;;;
 ;; Tests ;;
@@ -69,9 +71,9 @@
         (is (-> se second :form-flow-id)
             "Send event doesn't contain a :form-flow-lid")
 
-        (is (= (without-form-flow-id et)
+        (is (= (event-data-without et :form-flow-id)
                (cond-> se
-                 true without-form-flow-id
+                 true (event-data-without :form-flow-id)
                  (contains? (second se) :result) (update-in [1 :result] clean-clj-fn-print)))
             "A generated trace doesn't match with the expected trace")))))
 
@@ -109,8 +111,8 @@
       (multi-foo {:type :twice :n 5})
 
       (doseq [[et se] (map vector expected-traces @sent-events)]
-        (is (= (without-form-flow-id et)
-               (without-form-flow-id se))
+        (is (= (event-data-without et :form-flow-id)
+               (event-data-without se :form-flow-id))
             "A generated trace doesn't match with the expected trace")))))
 
 #trace
@@ -142,8 +144,8 @@
       (multi-arity-foo 5)
 
       (doseq [[et se] (map vector expected-traces @sent-events)]
-        (is (= (without-form-flow-id et)
-               (without-form-flow-id se))
+        (is (= (event-data-without et :form-flow-id)
+               (event-data-without se :form-flow-id))
             "A generated trace doesn't match with the expected trace")))))
 
 (defn bad-fn []
@@ -198,9 +200,9 @@
 
       (doseq [[et se] (map vector expected-traces @sent-events)]
 
-        (is (= (without-form-flow-id et)
+        (is (= (event-data-without et :form-flow-id)
                (cond-> se
-                 true without-form-flow-id
+                 true (event-data-without :form-flow-id)
                  (obj-result? (second se)) (assoc-in [1 :result] "[stripped-object]")))
             "A generated trace doesn't match with the expected trace")))))
 
@@ -240,8 +242,8 @@
 
       (doseq [[et se] (map vector expected-traces @sent-events)]
 
-        (is (= (without-form-flow-id et)
-               (without-form-flow-id se))
+        (is (= (event-data-without et :form-flow-id)
+               (event-data-without se :form-flow-id))
             "A generated trace doesn't match with the expected trace")))))
 
 
@@ -273,3 +275,48 @@
                "We didn't return the clojure.java.shell/sh var to its original implementation after untrace-var")
 
            (is (empty? @sent-events)))))))
+
+(deftest ref-tracing-test
+  (let [sent-events (atom [])
+        expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val {:name "foo", :age 37}}]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:age] :r 38]]}]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:address] :+ "montevideo/uruguay"]]}]]]
+
+    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                  rand-int (constantly 1)]
+
+      (testing "Tracing and untracing references"
+        
+        (let [person-state (atom {:name "foo"
+                                  :age 37})]
+          
+          (t/trace-ref :person-state person-state)
+
+          (swap! person-state update :age inc)
+          (swap! person-state assoc :address "montevideo/uruguay")
+
+          (t/untrace-ref person-state)
+
+          (swap! person-state update :age inc)
+          
+          (doseq [[et se] (map vector expected-traces @sent-events)]
+            (is (-> se second :ref-id number?)
+                "A generated ref-trace doesn't contain ref-id")
+
+            (is (=
+                 (pr-str (event-data-without et :ref-id))
+                 (pr-str (event-data-without se :ref-id)))
+                "A generated trace doesn't match with the expected trace"))
+
+          (testing "We can recover the value from traces"
+            (let [init-val (get-in expected-traces [0 1 :init-val])
+                  traced-val (reduce (fn [r [_ {:keys [patch]}]]
+                                       (edit.core/patch r (edit.edit/edits->script patch)))
+                                     init-val
+                                     (rest expected-traces))]
+              (is (= traced-val
+                     {:name "foo"
+                      :age 38
+                      :address "montevideo/uruguay"})
+                  
+                  "The recovered value after applying patches is wrong"))))))))

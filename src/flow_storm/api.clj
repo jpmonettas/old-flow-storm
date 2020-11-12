@@ -14,6 +14,14 @@
   Optionally you can provide a map with :host and :port keys."
   t/connect)
 
+(def trace-ref
+  "Adds a watch to ref with ref-name that traces its value changes."
+  t/trace-ref)
+
+(def untrace-ref
+  "Removes the watch added by trace-ref."
+  t/untrace-ref)
+
 (def traced-vars-orig-fns (atom {}))
 
 (defn- initial-ctx [form env]

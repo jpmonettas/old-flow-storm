@@ -1,4 +1,5 @@
 {:source-paths ["src" "test"]
- :dependencies [[com.taoensso/sente "1.16.0"]]
+ :dependencies [[com.taoensso/sente "1.16.0"]
+                [juji/editscript "0.4.6"]]
  :builds {:tests {:target :node-test
                    :output-to "output/run-tests.js"}}}

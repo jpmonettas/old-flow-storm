@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+- Implemented ref-tracing via :flow-storm/ref-init-trace and :flow-storm/ref-trace
+
 ## 0.3.2 (2020-11-06)
 
 - Fix multi arity fn support for cljs
