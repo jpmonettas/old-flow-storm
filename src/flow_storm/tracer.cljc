@@ -84,7 +84,7 @@
     
     (add-watch ref :flow-storm
                (fn [_ _ old-value new-value] 
-                 (let [patch (edit.core/diff old-value new-value)]
+                 (let [patch (edit.core/diff old-value new-value {:algo :quick})]
                    (ref-trace ref-id (edit.edit/get-edits patch)))))))
 
 (defn untrace-ref [ref]
