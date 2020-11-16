@@ -77,7 +77,7 @@
                     :patch patch}]
     (ws-send [:flow-storm/ref-trace trace-data])))
 
-(defn trace-ref [ref-name ref]
+(defn trace-ref [ref {:keys [ref-name]}]
   (let [ref-id (hash ref)]
     
     (ref-init-trace ref-id ref-name @ref)

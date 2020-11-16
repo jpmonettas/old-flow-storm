@@ -290,7 +290,7 @@
         (let [person-state (atom {:name "foo"
                                   :age 37})]
           
-          (t/trace-ref :person-state person-state)
+          (t/trace-ref person-state {:ref-name :person-state})
 
           (swap! person-state update :age inc)
           (swap! person-state assoc :address "montevideo/uruguay")

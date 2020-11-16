@@ -107,6 +107,13 @@ For example if you try to instrument `cljs.core/map` which is constantly being c
 
 Repeat the same procedure but with `flow-storm.api/untrace-var` to replace the var with the original function version.
 
+## Tracing references
+
+You can trace references (like atoms) by using `flow-storm.api/trace-ref` like :
+
+```clojure
+user> (fsa/trace-ref re-frame.db/app-db {:ref-name "re-frame-state"})
+```
 ## Notes
 
 **On node js you need the npm websocket library for the library to work!**.
