@@ -15,7 +15,7 @@ Big thanks to the [Cider](https://github.com/clojure-emacs/cider-nrepl) team for
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.3.3"}}}' -m flow-storm-debugger.server
+clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.4.0"}}}' -m flow-storm-debugger.server
 ```
 
 This will run the debugger. For instructions on using the debugger see [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger).
@@ -29,7 +29,7 @@ Now add this library to your application dependencies (deps.edn, project.clj, sh
 Simple repl example :
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.3.2"}}}'
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.4.0"}}}'
 ```
 
 ```clojure
