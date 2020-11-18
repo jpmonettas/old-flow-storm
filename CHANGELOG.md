@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+- Don't trace empty patches
+
 ## 0.4.0 (2020-11-17)
 
 - Implemented ref-tracing via :flow-storm/ref-init-trace and :flow-storm/ref-trace
