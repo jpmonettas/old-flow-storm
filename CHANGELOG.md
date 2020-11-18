@@ -3,6 +3,7 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+- Add :ignore-keys to trace-ref opts map
 - Don't trace empty patches
 
 ## 0.4.0 (2020-11-17)

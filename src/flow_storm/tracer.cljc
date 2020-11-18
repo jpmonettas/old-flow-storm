@@ -77,17 +77,24 @@
                     :patch patch}]
     (ws-send [:flow-storm/ref-trace trace-data])))
 
-(defn trace-ref [ref {:keys [ref-name]}]
-  (let [ref-id (hash ref)]
+(defn trace-ref [ref {:keys [ref-name ignore-keys]}]
+  (let [ref-id (hash ref)
+        rm-ignored-keys (fn [v]
+                          (if (and (seq ignore-keys) (map? v))
+                            (apply (partial dissoc v) ignore-keys)
+                            v))
+        ref-init-val (-> @ref
+                         rm-ignored-keys)]
     
-    (ref-init-trace ref-id ref-name @ref)
+    (ref-init-trace ref-id ref-name ref-init-val)
     
     (add-watch ref :flow-storm
                (fn [_ _ old-value new-value] 
-                 (let [patch (-> (edit.core/diff old-value new-value)
+                 (let [patch (-> (edit.core/diff (rm-ignored-keys old-value)
+                                                 (rm-ignored-keys new-value))
                                  edit.edit/get-edits)]
                    (when (seq patch)
-                    (ref-trace ref-id patch)))))))
+                     (ref-trace ref-id patch)))))))
 
 (defn untrace-ref [ref]
   (remove-watch ref :flow-storm))

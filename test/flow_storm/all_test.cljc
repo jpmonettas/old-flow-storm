@@ -288,13 +288,16 @@
       (testing "Tracing and untracing references"
         
         (let [person-state (atom {:name "foo"
-                                  :age 37})]
+                                  :age 37
+                                  :a-big-value :big})] ;; this shouldn't be traced
           
-          (t/trace-ref person-state {:ref-name :person-state})
+          (t/trace-ref person-state {:ref-name :person-state
+                                     :ignore-keys [:a-big-value]})
 
           (swap! person-state update :age inc)
           (swap! person-state assoc :address "montevideo/uruguay")
-
+          (swap! person-state assoc :a-big-value :even-bigger) ;; this shouldn't be traced
+          
           (t/untrace-ref person-state)
 
           (swap! person-state update :age inc)

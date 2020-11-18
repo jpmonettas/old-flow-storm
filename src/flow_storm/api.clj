@@ -15,7 +15,13 @@
   t/connect)
 
 (def trace-ref
-  "Adds a watch to ref with ref-name that traces its value changes."
+  "Adds a watch to ref with ref-name that traces its value changes.
+  The first argument is the ref to watch for.
+  The second argument is a options map. Available options are :
+  - :ref-name A string name for the ref.
+  - :ignore-keys A collection of keys that will be skipped in traces.
+
+  :ignore-keys only works for maps and does NOT ignore nested maps keys."
   t/trace-ref)
 
 (def untrace-ref
