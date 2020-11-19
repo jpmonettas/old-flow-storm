@@ -8,6 +8,10 @@
 (defonce pre-conn-events-holder (atom []))
 (def ^:dynamic *flow-id* nil)
 
+(defn get-timestamp []
+  #?(:cljs (.getTime (js/Date.))
+     :clj (System/currentTimeMillis)))
+
 (defn- hold-event
   "Collect the event in a internal atom (`pre-conn-events-holder`).
   Ment to be used by the websocket ws-send to hold events
@@ -28,7 +32,8 @@
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :form-flow-id form-flow-id
-                            :form (pr-str form)}
+                            :form (pr-str form)
+                            :timestamp (get-timestamp)}
                      args-vec (assoc :args-vec (binding [*print-length* (or *print-length* 50)]
                                                  (pr-str args-vec)))
                      fn-name  (assoc :fn-name fn-name)
@@ -41,7 +46,8 @@
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :form-flow-id form-flow-id
-                            :coor coor}
+                            :coor coor
+                            :timestamp (get-timestamp)}
                      (not err)   (assoc :result (binding [*print-length* (or *print-length* 50)] (pr-str result)))
                      err         (assoc :err {:error/message (:message err)})
                      outer-form? (assoc :outer-form? true))]
@@ -67,14 +73,16 @@
   [ref-id ref-name init-val]
   (let [trace-data {:ref-id ref-id
                     :ref-name ref-name
-                    :init-val init-val}]
+                    :init-val init-val
+                    :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/ref-init-trace trace-data])))
 
 (defn ref-trace
   "Sends the `:flow-storm/ref-trace` trace"
   [ref-id patch]
   (let [trace-data {:ref-id ref-id
-                    :patch patch}]
+                    :patch patch
+                    :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/ref-trace trace-data])))
 
 (defn trace-ref [ref {:keys [ref-name ignore-keys]}]
@@ -102,7 +110,9 @@
 (defn trace-tap [tap-id tap-name v]
   (let [trace-data {:tap-id tap-id
                     :tap-name tap-name
-                    :value v}]
+                    :value (binding [*print-length* (or *print-length* 50)]
+                             (pr-str v))
+                    :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/tap-trace trace-data])))
 
 (defn init-tap

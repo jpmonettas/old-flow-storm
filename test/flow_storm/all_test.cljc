@@ -41,29 +41,30 @@
 
         ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
         ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
-        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1267089144, :form "(defn bar [] (let [a 10] (->> (range (foo a a)) (map inc) (filter odd?) (reduce +))))", :args-vec "[]", :fn-name "bar"}]
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1267089144, :form "(defn bar [] (let [a 10] (->> (range (foo a a)) (map inc) (filter odd?) (reduce +))))", :args-vec "[]", :fn-name "bar" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1267089144, :coor [3], :symbol "a", :value "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 4 1], :result #?(:cljs "#object[cljs$core$_PLUS_]" :clj "#object[clojure.core$_PLUS_]")}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 3 1], :result #?(:cljs "#object[cljs$core$odd_QMARK_]" :clj "#object[clojure.core$odd_QMARK_]")}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 2 1], :result #?(:cljs "#object[cljs$core$inc]" :clj "#object[clojure.core$inc]")}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1 1], :result "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1 2], :result "10"}]
-                         [:flow-storm/init-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :form "(defn foo [a b] (+ a b (or 2 1)))", :args-vec "[10 10]", :fn-name "foo"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 4 1], :result #?(:cljs "#object[cljs$core$_PLUS_]" :clj "#object[clojure.core$_PLUS_]") :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 3 1], :result #?(:cljs "#object[cljs$core$odd_QMARK_]" :clj "#object[clojure.core$odd_QMARK_]") :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 2 1], :result #?(:cljs "#object[cljs$core$inc]" :clj "#object[clojure.core$inc]") :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1 1], :result "10" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1 2], :result "10" :timestamp 1}]
+                         [:flow-storm/init-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :form "(defn foo [a b] (+ a b (or 2 1)))", :args-vec "[10 10]", :fn-name "foo" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor nil, :symbol "a", :value "10"}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor nil, :symbol "b", :value "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 1], :result "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 2], :result "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 3], :result "2"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3], :result "22"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [], :result "22", :outer-form? true}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1], :result "22"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1], :result "(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21)"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 2], :result "(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 3], :result "(1 3 5 7 9 11 13 15 17 19 21)"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2], :result "121"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3], :result "121"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [], :result "121", :outer-form? true}]]]
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 1], :result "10" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 2], :result "10" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3 3], :result "2" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [3], :result "22" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id -828991137, :form-flow-id 27030, :coor [], :result "22", :outer-form? true :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1 1], :result "22" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 1], :result "(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21)" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 2], :result "(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2 3], :result "(1 3 5 7 9 11 13 15 17 19 21)" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3 2], :result "121" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [3], :result "121" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1267089144, :coor [], :result "121", :outer-form? true :timestamp 1}]]]
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
       (bar)
 
@@ -92,19 +93,20 @@
 
         ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
         ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
-        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :form "(defmethod multi-foo :square [{:keys [n]}] (* n n))", :args-vec "[{:type :square, :n 5}]", :fn-name "multi-foo"}]
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :form "(defmethod multi-foo :square [{:keys [n]}] (* n n))", :args-vec "[{:type :square, :n 5}]", :fn-name "multi-foo" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor nil, :symbol "n", :value "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 1], :result "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 2], :result "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4], :result "25"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [], :result "25", :outer-form? true}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 1], :result "5" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4 2], :result "5" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [4], :result "25" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1746119536, :form-flow-id 75891, :coor [], :result "25", :outer-form? true :timestamp 1}]
 
-                         [:flow-storm/init-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :form "(defmethod multi-foo :twice [{:keys [n]}] (* 2 n))", :args-vec "[{:type :twice, :n 5}]", :fn-name "multi-foo"}]
+                         [:flow-storm/init-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :form "(defmethod multi-foo :twice [{:keys [n]}] (* 2 n))", :args-vec "[{:type :twice, :n 5}]", :fn-name "multi-foo" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor nil, :symbol "n", :value "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4 2], :result "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4], :result "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [], :result "10", :outer-form? true}]]]
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4 2], :result "5" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [4], :result "10" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 872455023, :form-flow-id 76669, :coor [], :result "10", :outer-form? true :timestamp 1}]]]
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
 
       (multi-foo {:type :square :n 5})
@@ -125,20 +127,21 @@
 
         ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
         ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
-        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5]", :fn-name "multi-arity-foo"}]
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5]", :fn-name "multi-arity-foo" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "a", :value "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1 1], :result "5"}]
-                         [:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5 10]", :fn-name "multi-arity-foo"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1 1], :result "5" :timestamp 1}]
+                         [:flow-storm/init-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :form "(defn multi-arity-foo ([a] (multi-arity-foo a 10)) ([a b] (+ a b)))", :args-vec "[5 10]", :fn-name "multi-arity-foo" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "a", :value "5"}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor nil, :symbol "b", :value "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 1], :result "5"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 2], :result "10"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1], :result "15"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1], :result "15"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true}]]]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 1], :result "5" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1 2], :result "10" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [3 1], :result "15" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [2 1], :result "15" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1326303898, :form-flow-id 24689, :coor [], :result "15", :outer-form? true :timestamp 1}]]]
 
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
 
       (multi-arity-foo 5)
@@ -170,28 +173,29 @@
 
         ;; NOTE: we are leaving the :form-flow-id outh since it is random and we can't control
         ;; rand-int in macroexpansions with with-redefs, so we just check that there is a value there
-        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :form "(defn err-foo [] (->> (range 10) (map (fn [i] (if (= i 2) (bad-fn) i))) doall))", :args-vec "[]", :fn-name "err-foo"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :result "[stripped-object]"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 1], :result "(0 1 2 3 4 5 6 7 8 9)"}]
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :form "(defn err-foo [] (->> (range 10) (map (fn [i] (if (= i 2) (bad-fn) i))) doall))", :args-vec "[]", :fn-name "err-foo" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :result "[stripped-object]" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 1], :result "(0 1 2 3 4 5 6 7 8 9)" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "0"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "0"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "0"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "0"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "0" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "0" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "0" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "1"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "1"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "1"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "1"}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "1" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "false" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 3], :result "1" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :result "1" :timestamp 1}]
                          [:flow-storm/add-bind-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1], :symbol "i", :value "2"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "2"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "true"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 2], :err #:error{:message error-msg}}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :err #:error{:message error-msg}}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2], :err #:error{:message error-msg}}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3], :err #:error{:message error-msg}}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [], :err #:error{:message error-msg}, :outer-form? true}]]]
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1 1], :result "2" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 1], :result "true" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2 2], :err #:error{:message error-msg} :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2 1 2], :err #:error{:message error-msg} :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3 2], :err #:error{:message error-msg} :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [3], :err #:error{:message error-msg} :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 1423620308, :form-flow-id 45906, :coor [], :err #:error{:message error-msg}, :outer-form? true :timestamp 1}]]]
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
       (let [msg (try
                   (err-foo)
@@ -216,7 +220,8 @@
 
 (deftest zero-flow-test
   (let [sent-events (atom [])]
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))]
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))]
       (zfoo 42 42)
 
       (is (-> @sent-events first second :fixed-flow-id-starter?)
@@ -227,12 +232,13 @@
 
 (deftest case-test
   (let [sent-events (atom [])
-        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :form "(case :val1 :val1 (+ 1 2) :val2 0)"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [3], :result "3"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3"}]
-                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3", :outer-form? true}]]]
+        expected-traces [[:flow-storm/init-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :form "(case :val1 :val1 (+ 1 2) :val2 0)" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [3], :result "3" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3" :timestamp 1}]
+                         [:flow-storm/add-trace {:flow-id 1, :form-id 939228297, :form-flow-id 35800, :coor [], :result "3", :outer-form? true :timestamp 1}]]]
 
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
 
       ;; testing https://github.com/jpmonettas/flow-storm/issues/9
@@ -252,7 +258,8 @@
    (deftest trace-var-test
      (let [sent-events (atom [])]
 
-       (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+       (with-redefs [t/get-timestamp (constantly 1)
+                     t/ws-send (fn [event] (swap! sent-events conj event))
                      rand-int (constantly 1)]
 
          (testing "Instrumenting a var with trace-var works correctly"
@@ -278,11 +285,12 @@
 
 (deftest ref-tracing-test
   (let [sent-events (atom [])
-        expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val {:name "foo", :age 37}}]
-                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:age] :r 38]]}]
-                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:address] :+ "montevideo/uruguay"]]}]]]
+        expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val {:name "foo", :age 37} :timestamp 1}]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:age] :r 38]] :timestamp 1}]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:address] :+ "montevideo/uruguay"]] :timestamp 1}]]]
 
-    (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))
+    (with-redefs [t/get-timestamp (constantly 1)
+                  t/ws-send (fn [event] (swap! sent-events conj event))
                   rand-int (constantly 1)]
 
       (testing "Tracing and untracing references"
@@ -327,10 +335,11 @@
 #?(:clj
    (deftest tap-tracing-test
      (let [sent-events (atom [])
-           expected-traces [[:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value [1 2 3]}]
-                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value {:value 42}}]
-                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value 77}]]]
-       (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))]
+           expected-traces [[:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value "[1 2 3]" :timestamp 1}]
+                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value "{:value 42}" :timestamp 1}]
+                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value "77" :timestamp 1}]]]
+       (with-redefs [t/get-timestamp (constantly 1)
+                     t/ws-send (fn [event] (swap! sent-events conj event))]
          (t/init-tap 1 "test-tap")
 
          (tap> [1 2 3])

@@ -3,6 +3,7 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+- Add :timestamp to all traces (but binding ones)
 - Add tap tracing
 - Add :ignore-keys to trace-ref opts map
 - Don't trace empty patches
