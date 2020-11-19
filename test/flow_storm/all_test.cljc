@@ -1,7 +1,7 @@
 (ns flow-storm.all-test
   (:require [clojure.pprint :as pp]
             [flow-storm.api :as fsa]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is testing #?(:cljs async)]]
             [flow-storm.tracer :as t]
             [clojure.string :as str]
             [editscript.core :as edit.core]
@@ -323,3 +323,48 @@
                       :address "montevideo/uruguay"})
                   
                   "The recovered value after applying patches is wrong"))))))))
+
+#?(:clj
+   (deftest tap-tracing-test
+     (let [sent-events (atom [])
+           expected-traces [[:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value [1 2 3]}]
+                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value {:value 42}}]
+                            [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value 77}]]]
+       (with-redefs [t/ws-send (fn [event] (swap! sent-events conj event))]
+         (t/init-tap 1 "test-tap")
+
+         (tap> [1 2 3])
+         (tap> {:value 42})
+         (tap> 77)
+
+         (Thread/sleep 1000)
+         
+         (is (= expected-traces @sent-events)
+             "Expected tap traces aren't the same as expected traces."))))
+
+   ;; The functionality is working in CLJS but the with-redefs doesn't work
+   ;; when ws-send event is being called by the tap fn.
+   ;; Don't know why it works in CLJ, since the thread that is executing taps
+   ;; isn't probably the same that the one we are redefining for.
+   ;;
+   ;; :cljs
+   ;; (deftest tap-tracing-test
+   ;;   (async done
+   ;;          (let [sent-events (atom [])
+   ;;                expected-traces [[:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value [1 2 3]}]
+   ;;                                 [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value {:value 42}}]
+   ;;                                 [:flow-storm/tap-trace {:tap-id 1, :tap-name "test-tap", :value 77}]]]
+   ;;            (with-redefs [t/ws-send (fn [event]
+   ;;                                      (swap! sent-events conj event))]
+   ;;              (t/init-tap 1 "test-tap")
+
+   ;;              (tap> [1 2 3])
+   ;;              (tap> {:value 42})
+   ;;              (tap> 77)
+
+   ;;              (js/setTimeout (fn []
+   ;;                               (is (= expected-traces @sent-events)
+   ;;                                   "Expected tap traces aren't the same as expected traces.")
+   ;;                               (done))
+   ;;                             1000)))))
+   )

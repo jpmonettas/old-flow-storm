@@ -99,18 +99,33 @@
 (defn untrace-ref [ref]
   (remove-watch ref :flow-storm))
 
+(defn trace-tap [tap-id tap-name v]
+  (let [trace-data {:tap-id tap-id
+                    :tap-name tap-name
+                    :value v}]
+    (ws-send [:flow-storm/tap-trace trace-data])))
+
+(defn init-tap
+  ([] (let [rnd-id (rand-int 100000)] (init-tap rnd-id (str rnd-id))))
+  ([tap-name] (init-tap (rand-int 100000) tap-name))
+  ([tap-id tap-name]
+   (add-tap (fn [v]
+              (trace-tap tap-id tap-name v)))))
+
 (defn connect
   "Connects to the flow-storm debugger.
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
-  ([{:keys [host port protocol]}]
+  ([{:keys [host port protocol tap-name]}]
    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"
                                                                                  "dummy-csrf-token" ;; to avoid warning
                                                                                  {:type :ws
                                                                                   :protocol (or protocol :http)
                                                                                   :host (or host "localhost")
                                                                                   :port (or port 7722)})]
-
+     
+     (init-tap tap-name)
+     
      ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
      ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
      ;; It is assuming that the :chsk/state is the first event, which is error prone
