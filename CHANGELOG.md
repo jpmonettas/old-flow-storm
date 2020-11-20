@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+## 0.4.1 (2020-11-20)
+
 - Add :timestamp to all traces (but binding ones)
 - Add tap tracing
 - Add :ignore-keys to trace-ref opts map
