@@ -12,6 +12,10 @@
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
 
+(defn serialize-val [v]
+  (binding [*print-length* (or *print-length* 50)]
+    (pr-str v)))
+
 (defn- hold-event
   "Collect the event in a internal atom (`pre-conn-events-holder`).
   Ment to be used by the websocket ws-send to hold events
@@ -34,8 +38,7 @@
                             :form-flow-id form-flow-id
                             :form (pr-str form)
                             :timestamp (get-timestamp)}
-                     args-vec (assoc :args-vec (binding [*print-length* (or *print-length* 50)]
-                                                 (pr-str args-vec)))
+                     args-vec (assoc :args-vec (serialize-val args-vec))
                      fn-name  (assoc :fn-name fn-name)
                      flow-id  (assoc :fixed-flow-id-starter? true))]
     (ws-send [:flow-storm/init-trace trace-data])))
@@ -48,7 +51,7 @@
                             :form-flow-id form-flow-id
                             :coor coor
                             :timestamp (get-timestamp)}
-                     (not err)   (assoc :result (binding [*print-length* (or *print-length* 50)] (pr-str result)))
+                     (not err)   (assoc :result (serialize-val result))
                      err         (assoc :err {:error/message (:message err)})
                      outer-form? (assoc :outer-form? true))]
 
@@ -64,8 +67,7 @@
                     :form-flow-id form-flow-id
                     :coor coor
                     :symbol (name symb)
-                    :value (binding [*print-length* (or *print-length* 50)]
-                             (pr-str val))}]
+                    :value (serialize-val val)}]
     (ws-send [:flow-storm/add-bind-trace trace-data])))
 
 (defn ref-init-trace
@@ -73,7 +75,7 @@
   [ref-id ref-name init-val]
   (let [trace-data {:ref-id ref-id
                     :ref-name ref-name
-                    :init-val init-val
+                    :init-val (serialize-val init-val)
                     :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/ref-init-trace trace-data])))
 
@@ -110,8 +112,7 @@
 (defn trace-tap [tap-id tap-name v]
   (let [trace-data {:tap-id tap-id
                     :tap-name tap-name
-                    :value (binding [*print-length* (or *print-length* 50)]
-                             (pr-str v))
+                    :value (serialize-val v)
                     :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/tap-trace trace-data])))
 

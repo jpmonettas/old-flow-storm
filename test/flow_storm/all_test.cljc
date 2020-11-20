@@ -285,7 +285,8 @@
 
 (deftest ref-tracing-test
   (let [sent-events (atom [])
-        expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val {:name "foo", :age 37} :timestamp 1}]
+        init-val {:name "foo" :age 37}
+        expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val (t/serialize-val init-val) :timestamp 1}]
                          [:flow-storm/ref-trace {:ref-id 1, :patch [[[:age] :r 38]] :timestamp 1}]
                          [:flow-storm/ref-trace {:ref-id 1, :patch [[[:address] :+ "montevideo/uruguay"]] :timestamp 1}]]]
 
@@ -295,9 +296,8 @@
 
       (testing "Tracing and untracing references"
         
-        (let [person-state (atom {:name "foo"
-                                  :age 37
-                                  :a-big-value :big})] ;; this shouldn't be traced
+        (let [person-state (atom (assoc init-val
+                                        :a-big-value :big))] ;; this shouldn't be traced
           
           (t/trace-ref person-state {:ref-name :person-state
                                      :ignore-keys [:a-big-value]})
@@ -320,8 +320,7 @@
                 "A generated trace doesn't match with the expected trace"))
 
           (testing "We can recover the value from traces"
-            (let [init-val (get-in expected-traces [0 1 :init-val])
-                  traced-val (reduce (fn [r [_ {:keys [patch]}]]
+            (let [traced-val (reduce (fn [r [_ {:keys [patch]}]]
                                        (edit.core/patch r (edit.edit/edits->script patch)))
                                      init-val
                                      (rest expected-traces))]
