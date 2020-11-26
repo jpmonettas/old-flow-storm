@@ -120,8 +120,10 @@
   ([] (let [rnd-id (rand-int 100000)] (init-tap rnd-id (str rnd-id))))
   ([tap-name] (init-tap (rand-int 100000) tap-name))
   ([tap-id tap-name]
-   (add-tap (fn [v]
-              (trace-tap tap-id tap-name v)))))
+   ;; we resolve add-tap like this so flow-storm can be used in older versions of clojure
+   (when-let [add-tap-fn (resolve 'clojure.core/add-tap)]     
+    (add-tap-fn (fn [v]
+               (trace-tap tap-id tap-name v))))))
 
 (defn connect
   "Connects to the flow-storm debugger.
