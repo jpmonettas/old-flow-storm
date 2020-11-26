@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [editscript.core :as edit.core]
             [editscript.edit :as edit.edit]
-            #?(:clj [clojure.java.shell :as shell])))
+            #?(:clj [clojure.java.shell :as shell])
+            #?(:cljs [cljs.tools.reader :as tools-reader])))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;; Some utilities ;;
@@ -19,6 +20,9 @@
 
 (defn event-data-without [e k]
   (update e 1 dissoc k))
+
+#?(:clj (def read-str read-string)
+   :cljs (def read-str tools-reader/read-string))
 
 ;;;;;;;;;;;
 ;; Tests ;;
@@ -287,8 +291,8 @@
   (let [sent-events (atom [])
         init-val {:name "foo" :age 37}
         expected-traces [[:flow-storm/ref-init-trace {:ref-id 1, :ref-name :person-state, :init-val (t/serialize-val init-val) :timestamp 1}]
-                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:age] :r 38]] :timestamp 1}]
-                         [:flow-storm/ref-trace {:ref-id 1, :patch [[[:address] :+ "montevideo/uruguay"]] :timestamp 1}]]]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch "[[[:age] :r 38]]" :timestamp 1}]
+                         [:flow-storm/ref-trace {:ref-id 1, :patch "[[[:address] :+ \"montevideo/uruguay\"]]" :timestamp 1}]]]
 
     (with-redefs [t/get-timestamp (constantly 1)
                   t/ws-send (fn [event] (swap! sent-events conj event))
@@ -321,7 +325,7 @@
 
           (testing "We can recover the value from traces"
             (let [traced-val (reduce (fn [r [_ {:keys [patch]}]]
-                                       (edit.core/patch r (edit.edit/edits->script patch)))
+                                       (edit.core/patch r (edit.edit/edits->script (read-str patch))))
                                      init-val
                                      (rest expected-traces))]
               (is (= traced-val

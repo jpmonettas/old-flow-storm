@@ -83,7 +83,7 @@
   "Sends the `:flow-storm/ref-trace` trace"
   [ref-id patch]
   (let [trace-data {:ref-id ref-id
-                    :patch patch
+                    :patch (pr-str patch)
                     :timestamp (get-timestamp)}]
     (ws-send [:flow-storm/ref-trace trace-data])))
 
