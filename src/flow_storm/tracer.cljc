@@ -66,6 +66,7 @@
                     :form-id form-id
                     :form-flow-id form-flow-id
                     :coor coor
+                    :timestamp (get-timestamp)
                     :symbol (name symb)
                     :value (serialize-val val)}]
     (ws-send [:flow-storm/add-bind-trace trace-data])))
