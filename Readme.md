@@ -15,7 +15,7 @@ Big thanks to the [Cider](https://github.com/clojure-emacs/cider-nrepl) team for
 In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.4.1"}}}' -m flow-storm-debugger.server
+clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.5.0"}}}' -m flow-storm-debugger.server
 ```
 
 This will run the debugger. For instructions on using the debugger see [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger).
@@ -29,7 +29,7 @@ Now add this library to your application dependencies (deps.edn, project.clj, sh
 Simple repl example :
 
 ```bash
-clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.4.1"}}}'
+clj -Sdeps '{:deps {jpmonettas/flow-storm {:mvn/version "0.4.2"}}}'
 ```
 
 ```clojure
@@ -73,6 +73,7 @@ If you need to connect to a debugger instance not running in the same device as 
 - protocol Can be `:http` or `:https` (defaults to :http)
 - host (defaults to "localhost")
 - port (defaults to 7722)
+- tap-name A string used for reporting tap> values from this process
 
 ## Instrumenting library code with trace-var
 

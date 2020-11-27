@@ -3,6 +3,9 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+## 0.4.2 (2020-11-27)
+
+- Resolve add-tap with resolve so flow-storm can be used with older versions of clojure
 - Do patches value serialization
 - Fix ref-init-trace value serialization
 
