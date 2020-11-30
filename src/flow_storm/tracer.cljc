@@ -131,30 +131,35 @@
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
   ([{:keys [host port protocol tap-name]}]
-   (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"
-                                                                                 "dummy-csrf-token" ;; to avoid warning
-                                                                                 {:type :ws
-                                                                                  :protocol (or protocol :http)
-                                                                                  :host (or host "localhost")
-                                                                                  :port (or port 7722)})]
+   
+   ;; don't connect if we already have a connection
+   ;; this is so connect can be called multiple times, usefull in hot reload context
+   ;; when the init function in called again without restarting everything
+   (when-not @send-fn-a
+    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"
+                                                                                  "dummy-csrf-token" ;; to avoid warning
+                                                                                  {:type :ws
+                                                                                   :protocol (or protocol :http)
+                                                                                   :host (or host "localhost")
+                                                                                   :port (or port 7722)})]
      
-     (init-tap tap-name)
+      (init-tap tap-name)
      
-     ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
-     ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
-     ;; It is assuming that the :chsk/state is the first event, which is error prone
-     (take! ch-recv (fn [{:keys [event]}]
-                      (when (= (first event) :chsk/state)
-                        (let [holded-events @pre-conn-events-holder]
-                          (println "Ws connection ready, re playing " (count holded-events) "events")
+      ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
+      ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
+      ;; It is assuming that the :chsk/state is the first event, which is error prone
+      (take! ch-recv (fn [{:keys [event]}]
+                       (when (= (first event) :chsk/state)
+                         (let [holded-events @pre-conn-events-holder]
+                           (println "Ws connection ready, re playing " (count holded-events) "events")
 
-                          ;; set the websocket send-fn globally so it can be
-                          ;; used by the tracers
-                          (reset! send-fn-a send-fn)
+                           ;; set the websocket send-fn globally so it can be
+                           ;; used by the tracers
+                           (reset! send-fn-a send-fn)
 
-                          ;; replay all events we have on hold
-                          (doseq [ev holded-events]
-                            (send-fn ev))
+                           ;; replay all events we have on hold
+                           (doseq [ev holded-events]
+                             (send-fn ev))
 
-                          ;; empty the events holder atom
-                          (reset! pre-conn-events-holder []))))))))
+                           ;; empty the events holder atom
+                           (reset! pre-conn-events-holder [])))))))))
