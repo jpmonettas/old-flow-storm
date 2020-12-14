@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file. This change
 
 ## [Unreleased]
 
+## 0.5.0 (2020-12-14)
+
+- Works against flow-storm-debugger > 0.6.0 
+- Encode data as transit and send it in baches of 500ms for better performance
 - Don't connect if we already have a connection
 
 ## 0.4.2 (2020-11-27)
