@@ -304,28 +304,28 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
-(defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form? compiler flow-id] :as ctx}]
+(defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form? compiler flow-id] :as ctx}]
   (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id :flow-id flow-id}
                      outer-form? (assoc :outer-form? outer-form?))
         catch-expr (case compiler
                      :clj `(catch Exception e#
-                             (~instrument-fn nil
+                             (~on-expr-exec-fn nil
                               {:message (.toString e#)}
                               ~trace-data
                               (quote ~orig))
                              (throw e#))
                      :cljs `(catch :default e#
-                              (~instrument-fn nil
+                              (~on-expr-exec-fn nil
                                {:message (.toString e#)}
                                ~trace-data
                                (quote ~orig))
                               (throw e#)))]
     `(try
-       (~instrument-fn ~form nil ~trace-data (quote ~orig))
+       (~on-expr-exec-fn ~form nil ~trace-data (quote ~orig))
        ~catch-expr)))
 
-;; (defn- instrument-form [form orig coor {:keys [instrument-fn form-flow-id form-id outer-form?]}]
-;;   `(~instrument-fn ~form nil
+;; (defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form?]}]
+;;   `(~on-expr-exec-fn ~form nil
 ;;     ~(cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
 ;;        outer-form? (assoc :outer-form? outer-form?))
 ;;     (quote ~orig)))
@@ -512,7 +512,7 @@
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form. Like
   tracing the form source code, and wrapping *flow-id* dynamic bindings"
-  [{:keys [orig-form args-vec fn-name form-id form-flow-id flow-id on-outer-form-fn] :as ctx} forms]
+  [{:keys [orig-form args-vec fn-name form-id form-flow-id flow-id on-outer-form-fn on-fn-call-fn] :as ctx} forms]
   `(binding [flow-storm.tracer/*flow-id* (or ~flow-id
                                              flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
@@ -526,7 +526,11 @@
                          :fn-name ~fn-name}
       (quote ~orig-form))
 
-     ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true))))
+     ~(when fn-name
+        (list on-fn-call-fn form-id fn-name args-vec))
+
+     (binding [flow-storm.tracer/*init-traced-forms* (conj flow-storm.tracer/*init-traced-forms* [~flow-id ~form-id])]
+       ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true)))))
 
 ;; TODO: can this be mixed with normal fn* body instrumentation?
 (defn instrument-function-bodies [[_ & arities :as form] ctx wrapper]
@@ -544,7 +548,7 @@
 (defn unwrap-instrumentation [inst-form]
   (-> inst-form
       second   ;; discard the try
-      second)) ;; discard the instrument-fn (trace-and-return)
+      second)) ;; discard the on-expr-exec-fn (trace-and-return)
 
 ;; ClojureScript multi arity defn expansion is much more involved than
 ;; a clojure one

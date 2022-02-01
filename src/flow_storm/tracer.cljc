@@ -1,14 +1,16 @@
 (ns flow-storm.tracer
-  (:require  [taoensso.sente  :as sente]
-             [clojure.core.async :as async :refer [take!]]
-             [editscript.core :as edit.core]
-             [editscript.edit :as edit.edit]
-             [cognitect.transit :as transit]
-             [taoensso.sente.packers.transit :as sente-transit]))
+  (:require [editscript.core :as edit.core]
+            [editscript.edit :as edit.edit]
+            [cognitect.transit :as transit]
+            [jsonista.core :as json])
+  (:import [java.net URI]
+           [org.java_websocket.client WebSocketClient]
+           [org.java_websocket.handshake ServerHandshake]))
 
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
 (def ^:dynamic *flow-id* nil)
+(def ^:dynamic *init-traced-forms* #{})
 
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
@@ -33,62 +35,65 @@
   ((or @send-fn-a hold-event) event))
 
 (defn init-trace
-  "Instrumentation function. Sends the `:flow-storm/init-trace` trace"
-  [{:keys [form-id form-flow-id flow-id args-vec fn-name]} form]
-  (let [trace-data (cond-> {:flow-id *flow-id*
-                            :form-id form-id
-                            :form-flow-id form-flow-id
-                            :form (pr-str form)
-                            :timestamp (get-timestamp)}
-                     args-vec (assoc :args-vec (serialize-val args-vec))
-                     fn-name  (assoc :fn-name fn-name)
-                     flow-id  (assoc :fixed-flow-id-starter? true))]
-    (ws-send [:flow-storm/init-trace trace-data])))
+  "Instrumentation function. Sends the `:init-trace` trace"
+  [{:keys [form-id flow-id args-vec fn-name]} form]
+  (when-not (contains? *init-traced-forms* [flow-id form-id])
+    (let [trace-data (cond-> {:flow-id *flow-id*
+                              :form-id form-id
+                              :form (pr-str form)
+                              :timestamp (get-timestamp)}
+                       flow-id  (assoc :fixed-flow-id-starter? true))]
+      (ws-send [:init-trace trace-data]))))
 
-(defn trace-and-return
-  "Instrumentation function. Sends the `:flow-storm/add-trace` trace and returns the result."
-  [result err {:keys [coor outer-form? form-id form-flow-id]} orig-form]
+(defn expr-exec-trace
+  "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
+  [result err {:keys [coor outer-form? form-id]} orig-form]
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
-                            :form-flow-id form-flow-id
                             :coor coor
                             :timestamp (get-timestamp)}
                      (not err)   (assoc :result (serialize-val result))
                      err         (assoc :err {:error/message (:message err)})
                      outer-form? (assoc :outer-form? true))]
 
-    (ws-send [:flow-storm/add-trace trace-data])
+    (ws-send [:exec-trace trace-data])
 
     result))
 
+(defn fn-call-trace [form-id fn-name args-vec]
+  (ws-send [:fn-call-trace {:flow-id *flow-id*
+                            :form-id form-id
+                            :fn-name fn-name
+                            :args-vec (pr-str args-vec)
+                            :timestamp (get-timestamp)}]))
+
 (defn bound-trace
-  "Instrumentation function. Sends the `:flow-storm/add-bind-trace` trace"
-  [symb val {:keys [coor form-id form-flow-id]}]
+  "Instrumentation function. Sends the `:bind-trace` trace"
+  [symb val {:keys [coor form-id]}]
   (let [trace-data {:flow-id *flow-id*
                     :form-id form-id
-                    :form-flow-id form-flow-id
-                    :coor coor
+                    :coor (or coor [])
                     :timestamp (get-timestamp)
                     :symbol (name symb)
                     :value (serialize-val val)}]
-    (ws-send [:flow-storm/add-bind-trace trace-data])))
+    (ws-send [:bind-trace trace-data])))
 
 (defn ref-init-trace
-  "Sends the `:flow-storm/ref-init-trace` trace"
+  "Sends the `:ref-init-trace` trace"
   [ref-id ref-name init-val]
   (let [trace-data {:ref-id ref-id
                     :ref-name ref-name
                     :init-val (serialize-val init-val)
                     :timestamp (get-timestamp)}]
-    (ws-send [:flow-storm/ref-init-trace trace-data])))
+    (ws-send [:ref-init-trace trace-data])))
 
 (defn ref-trace
-  "Sends the `:flow-storm/ref-trace` trace"
+  "Sends the `:ref-trace` trace"
   [ref-id patch]
   (let [trace-data {:ref-id ref-id
                     :patch (pr-str patch)
                     :timestamp (get-timestamp)}]
-    (ws-send [:flow-storm/ref-trace trace-data])))
+    (ws-send [:ref-trace trace-data])))
 
 (defn trace-ref [ref {:keys [ref-name ignore-keys]}]
   (let [ref-id (hash ref)
@@ -117,7 +122,7 @@
                     :tap-name tap-name
                     :value (serialize-val v)
                     :timestamp (get-timestamp)}]
-    (ws-send [:flow-storm/tap-trace trace-data])))
+    (ws-send [:tap-trace trace-data])))
 
 (defn init-tap
   ([] (let [rnd-id (rand-int 100000)] (init-tap rnd-id (str rnd-id))))
@@ -134,11 +139,31 @@
   ([] (connect nil))
   ([{:keys [host port protocol tap-name]}]
 
+   (when-not @send-fn-a
+     (let [wsc (proxy
+                   [WebSocketClient]
+                   [(URI. "ws://localhost:7722/ws")]
+                 (onOpen [^ServerHandshake handshake-data]
+                   (println "Connection opened"))
+                 (onMessage [^String message])
+                 (onClose [code reason remote?])
+                 (onError [^Exception e]
+                   (println "ERROR" e)))]
+       (.connect wsc)
+       (reset! send-fn-a (fn [event]
+                           (.send wsc (json/write-value-as-string event))))))))
+
+#_(defn connect
+  "Connects to the flow-storm debugger.
+  When connection is ready, replies any events hold in `pre-conn-events-holder`"
+  ([] (connect nil))
+  ([{:keys [host port protocol tap-name]}]
+
    ;; don't connect if we already have a connection
    ;; this is so connect can be called multiple times, usefull in hot reload context
    ;; when the init function in called again without restarting everything
    (when-not @send-fn-a
-    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/chsk"
+    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/ws"
                                                                                   "dummy-csrf-token" ;; to avoid warning
                                                                                   {:type :ws
                                                                                    :packer (sente-transit/->TransitPacker :json {} {})

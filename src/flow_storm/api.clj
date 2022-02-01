@@ -33,8 +33,9 @@
 (defn- initial-ctx [form env]
   (let [form-id (hash form)
         form-flow-id (rand-int 100000)]
-    {:instrument-fn    'flow-storm.tracer/trace-and-return
+    {:on-expr-exec-fn    'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
+     :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
      :on-outer-form-fn 'flow-storm.tracer/init-trace
      :compiler         (i/target-from-env env)
      :form-id          form-id
@@ -96,4 +97,3 @@
 
 (defn read-ztrace-tag [form]
   `(flow-storm.api/trace 0 ~form))
-
