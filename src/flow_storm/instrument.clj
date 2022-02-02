@@ -519,15 +519,13 @@
                                              (rand-int 10000))]
      (~on-outer-form-fn {:form-id ~form-id
                          :flow-id ~flow-id
-                         :form-flow-id ~form-flow-id
-                         ;; remove the first level & symb from args-vec or
-                         ;; the expansion will not compile
-                         :args-vec ~(when args-vec (remove-&-symb args-vec))
-                         :fn-name ~fn-name}
+                         :form-flow-id ~form-flow-id}
       (quote ~orig-form))
 
+     ;; remove the first level & symb from args-vec or
+     ;; the expansion will not compile
      ~(when fn-name
-        (list on-fn-call-fn form-id fn-name args-vec))
+        (list on-fn-call-fn form-id fn-name (when args-vec (remove-&-symb args-vec))))
 
      (binding [flow-storm.tracer/*init-traced-forms* (conj flow-storm.tracer/*init-traced-forms* [~flow-id ~form-id])]
        ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true)))))
