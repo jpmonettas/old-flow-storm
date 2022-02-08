@@ -9,6 +9,9 @@
 
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
+
+(defonce per-form-traces (atom {}))
+
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* #{})
 
@@ -16,9 +19,13 @@
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
 
-(defn serialize-val [v]
-  (binding [*print-length* (or *print-length* 50)]
-    (pr-str v)))
+(defn serialize-val [v]  
+  (try
+    (binding [*print-length* (or *print-length* 50)]
+      (pr-str v))
+    (catch Exception e      
+      (println "Can't serialize this, skipping " (type v))
+      "")))
 
 (defn- hold-event
   "Collect the event in a internal atom (`pre-conn-events-holder`).
@@ -31,16 +38,25 @@
 (defn ws-send
   "Send the event thru the connected websocket. If the websocket
   connection is not ready, hold it in `pre-conn-events-holder`"
-  [event]
-  ((or @send-fn-a hold-event) event))
+  [[_ {:keys [form-id]} :as event]]
+  ((or @send-fn-a hold-event) event)
+  #_(if (or (nil? form-id)
+            (<= (get @per-form-traces form-id 0) 50))
+    (do 
+      (when form-id (swap! per-form-traces update form-id (fnil inc 0)))
+      
+      ((or @send-fn-a hold-event) event))
+
+    (println "WARN hit trace limit for form id " form-id ". No more forms are going to be traced for it.")))
 
 (defn init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id flow-id args-vec fn-name]} form]
+  [{:keys [form-id flow-id args-vec fn-name ns]} form]
   (when-not (contains? *init-traced-forms* [flow-id form-id])
     (let [trace-data (cond-> {:flow-id *flow-id*
                               :form-id form-id
                               :form (pr-str form)
+                              :ns ns
                               :timestamp (get-timestamp)}
                        flow-id  (assoc :fixed-flow-id-starter? true))]
       (ws-send [:init-trace trace-data]))))
@@ -51,6 +67,7 @@
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :coor coor
+                            :thread-id (.getId (Thread/currentThread))
                             :timestamp (get-timestamp)}
                      (not err)   (assoc :result (serialize-val result))
                      err         (assoc :err {:error/message (:message err)})
@@ -60,11 +77,13 @@
 
     result))
 
-(defn fn-call-trace [form-id fn-name args-vec]
+(defn fn-call-trace [form-id ns fn-name args-vec]
   (ws-send [:fn-call-trace {:flow-id *flow-id*
                             :form-id form-id
                             :fn-name fn-name
-                            :args-vec (pr-str args-vec)
+                            :fn-ns ns
+                            :thread-id (.getId (Thread/currentThread))
+                            :args-vec (serialize-val args-vec)
                             :timestamp (get-timestamp)}]))
 
 (defn bound-trace
@@ -73,6 +92,7 @@
   (let [trace-data {:flow-id *flow-id*
                     :form-id form-id
                     :coor (or coor [])
+                    :thread-id (.getId (Thread/currentThread))
                     :timestamp (get-timestamp)
                     :symbol (name symb)
                     :value (serialize-val val)}]
@@ -138,20 +158,19 @@
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
   ([{:keys [host port protocol tap-name]}]
-
-   (when-not @send-fn-a
-     (let [wsc (proxy
-                   [WebSocketClient]
-                   [(URI. "ws://localhost:7722/ws")]
-                 (onOpen [^ServerHandshake handshake-data]
-                   (println "Connection opened"))
-                 (onMessage [^String message])
-                 (onClose [code reason remote?])
-                 (onError [^Exception e]
-                   (println "ERROR" e)))]
-       (.connect wsc)
-       (reset! send-fn-a (fn [event]
-                           (.send wsc (json/write-value-as-string event))))))))
+   (let [wsc (proxy
+                 [WebSocketClient]
+                 [(URI. "ws://localhost:7722/ws")]
+               (onOpen [^ServerHandshake handshake-data]
+                 (println "Connection opened"))
+               (onMessage [^String message])
+               (onClose [code reason remote?]
+                 (println "Connection closed"))
+               (onError [^Exception e]
+                 (println "WS ERROR" e)))]
+     (.connect wsc)
+     (reset! send-fn-a (fn [event]
+                         (.send wsc (json/write-value-as-string event)))))))
 
 #_(defn connect
   "Connects to the flow-storm debugger.

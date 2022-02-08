@@ -7,23 +7,26 @@
 
 (defn- initial-ctx-clj [form]
   (let [form-id (hash form)]
-    {:on-expr-exec-fn    'flow-storm.tracer/expr-exec-trace
+    {
+     :on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
      :on-outer-form-fn 'flow-storm.tracer/init-trace
-     :compiler :clj
+     :compiler         :clj
+     :disable          #{:fn-call :binding}
      :form-id          form-id}))
 
-(defn redefine-vars-clj [inst-form var-symb orig-form {:keys [compiler] :as ctx}]
-  (let [outer-form (fsi/unwrap-instrumentation inst-form)]
+(defn redefine-vars-clj [inst-form var-symb orig-form {:keys [compiler disable] :as ctx}]
+  (let [outer-form (if (disable :fn-call) inst-form (fsi/unwrap-instrumentation inst-form))]
     (if (= (fsi/outer-form-type outer-form ctx) :defn)
 
       (let [{:keys [fn-body fn-name]} (fsi/parse-defn-expansion outer-form)
             fn-body (fsi/instrument-function-bodies
                      fn-body
                      (assoc ctx
+                            :form-ns (namespace var-symb)
                             :orig-form orig-form
-                            :fn-name (name fn-name))
+                            :fn-name (str fn-name))
                      fsi/instrument-outer-forms)
             var-ns (when-let [var-ns (namespace var-symb)] (symbol var-ns))
             var-name (symbol (name var-symb))]
@@ -64,7 +67,8 @@
         (println " ( OK )")
         (swap! stats* update-in [(ns-name ns) :instrumented] inc)
         (catch Exception e
-          (println " ERROR: couldn't instrument this code because " (.getMessage e)))))))
+          (println " ERROR: couldn't instrument this code because " (.getMessage e))
+          #_(.printStackTrace e))))))
 
 (defn trace-all-ns [all-ns]
   (let [stats* (atom (zipmap (map ns-name all-ns) (repeat {:instrumented 0})))]
@@ -83,16 +87,15 @@
 
   (fsa/connect)
 
-
-  (-> (all-ns-with-prefix "cljs.main")
-      first
-      trace-all-ns-vars)
-
+  (trace-all-ns (all-ns-with-prefix "cljs.main"))
   (trace-all-ns (all-ns-with-prefix "cljs."))
 
-  (cljs-main/-main ["--compile" "hello-world.core"])
 
+  (do
+    (def t (Thread. (fn [] (cljs-main/-main ["--compile" "hello-world.core"]))))
+    (.start t))
 
+  (.stop t)
 
 
 

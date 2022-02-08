@@ -180,8 +180,9 @@
 
 (defn- bind-tracer
   "Generates a form to trace a symbol value at coor."
-  [symb coor {:keys [on-bind-fn form-id form-flow-id] :as ctx}]
-  (when-not (uninteresting-symb? symb)
+  [symb coor {:keys [on-bind-fn form-id form-flow-id disable] :as ctx}]
+  (when-not (or (disable :binding)
+                (uninteresting-symb? symb))
     `(~on-bind-fn
       (quote ~symb)
       ~symb
@@ -304,25 +305,31 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
-(defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form? compiler flow-id] :as ctx}]
-  (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id :flow-id flow-id}
-                     outer-form? (assoc :outer-form? outer-form?))
-        catch-expr (case compiler
-                     :clj `(catch Exception e#
-                             (~on-expr-exec-fn nil
-                              {:message (.toString e#)}
-                              ~trace-data
-                              (quote ~orig))
-                             (throw e#))
-                     :cljs `(catch :default e#
-                              (~on-expr-exec-fn nil
-                               {:message (.toString e#)}
-                               ~trace-data
-                               (quote ~orig))
-                              (throw e#)))]
-    `(try
-       (~on-expr-exec-fn ~form nil ~trace-data (quote ~orig))
-       ~catch-expr)))
+(defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form? compiler flow-id disable] :as ctx}]
+  ;; only disable :fn-call traces if it is not the outer form, we still want to
+  ;; trace it since its the function return trace
+  (if (and (disable :fn-call) (not outer-form?))
+
+    form
+
+    (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id :flow-id flow-id}
+                       outer-form? (assoc :outer-form? outer-form?))
+          catch-expr (case compiler
+                       :clj `(catch Exception e#
+                               (~on-expr-exec-fn nil
+                                {:message (.toString e#)}
+                                ~trace-data
+                                (quote ~orig))
+                               (throw e#))
+                       :cljs `(catch :default e#
+                                (~on-expr-exec-fn nil
+                                 {:message (.toString e#)}
+                                 ~trace-data
+                                 (quote ~orig))
+                                (throw e#)))]
+      `(try
+         (~on-expr-exec-fn ~form nil ~trace-data (quote ~orig))
+         ~catch-expr))))
 
 ;; (defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form?]}]
 ;;   `(~on-expr-exec-fn ~form nil
@@ -512,20 +519,20 @@
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form. Like
   tracing the form source code, and wrapping *flow-id* dynamic bindings"
-  [{:keys [orig-form args-vec fn-name form-id form-flow-id flow-id on-outer-form-fn on-fn-call-fn] :as ctx} forms]
+  [{:keys [orig-form args-vec fn-name form-ns form-id form-flow-id flow-id on-outer-form-fn on-fn-call-fn] :as ctx} forms]
   `(binding [flow-storm.tracer/*flow-id* (or ~flow-id
                                              flow-storm.tracer/*flow-id*
                                              ;; TODO: maybe change this to UUID
                                              (rand-int 10000))]
      (~on-outer-form-fn {:form-id ~form-id
                          :flow-id ~flow-id
-                         :form-flow-id ~form-flow-id}
+                         :ns ~form-ns}
       (quote ~orig-form))
 
      ;; remove the first level & symb from args-vec or
      ;; the expansion will not compile
      ~(when fn-name
-        (list on-fn-call-fn form-id fn-name (when args-vec (remove-&-symb args-vec))))
+        (list on-fn-call-fn form-id form-ns fn-name (when args-vec (remove-&-symb args-vec))))
 
      (binding [flow-storm.tracer/*init-traced-forms* (conj flow-storm.tracer/*init-traced-forms* [~flow-id ~form-id])]
        ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true)))))
@@ -586,7 +593,7 @@
                                                 fn-body
                                                 (assoc ctx
                                                        :orig-form orig-form
-                                                       :fn-name (name fn-name))
+                                                       :fn-name (str fn-name))
 
                                                 instrument-outer-forms)]
                                (list 'set! xarity inst-bodies))))
@@ -637,14 +644,14 @@
      :method-val mval
      :method-body mbody}))
 
-(defn fix-outer-form-instrumentation [form orig-form {:keys [compiler] :as ctx}]
-  (let [outer-form (unwrap-instrumentation form)
+(defn fix-outer-form-instrumentation [form orig-form {:keys [compiler disable] :as ctx}]
+  (let [outer-form (if (disable :fn-call) form (unwrap-instrumentation form))
         instrument-bodies (fn [fn-name fn-body]
                             (instrument-function-bodies
                              fn-body
                              (assoc ctx
                                     :orig-form orig-form
-                                    :fn-name (name fn-name))
+                                    :fn-name (str fn-name))
                              instrument-outer-forms))]
     (case (outer-form-type outer-form ctx)
       :defn (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
@@ -669,6 +676,7 @@
             fn-body (instrument-function-bodies
                      fn-body
                      (assoc ctx
+                            :form-ns (namespace var-symb)
                             :orig-form orig-form
                             :fn-name (name fn-name))
                      instrument-outer-forms)

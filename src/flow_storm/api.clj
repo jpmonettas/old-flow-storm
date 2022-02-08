@@ -31,15 +31,14 @@
 (def traced-vars-orig-fns (atom {}))
 
 (defn- initial-ctx [form env]
-  (let [form-id (hash form)
-        form-flow-id (rand-int 100000)]
-    {:on-expr-exec-fn    'flow-storm.tracer/expr-exec-trace
+  (let [form-id (hash form)]
+    {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
      :on-outer-form-fn 'flow-storm.tracer/init-trace
      :compiler         (i/target-from-env env)
      :form-id          form-id
-     :form-flow-id     form-flow-id}))
+     :disable          #{}}))
 
 (defn- pprint-on-err [x]
   (binding [*out* *err*] (pp/pprint x)))
@@ -50,7 +49,8 @@
   ([flow-id form]
    (binding [i/*environment* &env]
      (let [ctx (-> (initial-ctx form &env)
-                   (assoc :flow-id flow-id))
+                   (assoc :flow-id flow-id
+                          :form-ns (str (ns-name *ns*))))
            inst-code (-> form
                          (i/instrument-all ctx)
                          (i/fix-outer-form-instrumentation form ctx))]
@@ -97,3 +97,20 @@
 
 (defn read-ztrace-tag [form]
   `(flow-storm.api/trace 0 ~form))
+
+(comment
+  (connect)
+  #trace
+  (defn factorial [n]
+    (if (zero? n)
+      1
+      (* n (factorial (dec n)))))
+
+  #trace
+  (defn boo [xs]
+    (reduce + (pmap factorial xs)))
+
+  (boo [2 4 5])
+
+  (factorial 5)
+  )
