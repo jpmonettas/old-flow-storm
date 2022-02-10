@@ -13,11 +13,11 @@
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
      :on-outer-form-fn 'flow-storm.tracer/init-trace
      :compiler         :clj
-     :disable          #{:fn-call :binding}
+     :disable          #{:expr :binding} ;; :expr :binding
      :form-id          form-id}))
 
 (defn redefine-vars-clj [inst-form var-symb orig-form {:keys [compiler disable] :as ctx}]
-  (let [outer-form (if (disable :fn-call) inst-form (fsi/unwrap-instrumentation inst-form))]
+  (let [outer-form (if (disable :expr) inst-form (fsi/unwrap-instrumentation inst-form))]
     (if (= (fsi/outer-form-type outer-form ctx) :defn)
 
       (let [{:keys [fn-body fn-name]} (fsi/parse-defn-expansion outer-form)
@@ -92,11 +92,15 @@
 
 
   (do
-    (def t (Thread. (fn [] (cljs-main/-main ["--compile" "hello-world.core"]))))
+    (def t (Thread. (fn []
+                      (binding [flow-storm.tracer/*stack-count-limit* 5
+                                flow-storm.tracer/*stacks-state* (atom {})
+                                flow-storm.tracer/*init-traced-forms* (atom #{})]
+                        (cljs-main/-main ["--compile" "hello-world.core"])))))
     (.start t))
 
   (.stop t)
 
-
+  (take 10 (sort-by second > @flow-storm.tracer/fn-calls-count))
 
   )

@@ -308,7 +308,7 @@
 (defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form? compiler flow-id disable] :as ctx}]
   ;; only disable :fn-call traces if it is not the outer form, we still want to
   ;; trace it since its the function return trace
-  (if (and (disable :fn-call) (not outer-form?))
+  (if (and (disable :expr) (not outer-form?))
 
     form
 
@@ -534,8 +534,8 @@
      ~(when fn-name
         (list on-fn-call-fn form-id form-ns fn-name (when args-vec (remove-&-symb args-vec))))
 
-     (binding [flow-storm.tracer/*init-traced-forms* (conj flow-storm.tracer/*init-traced-forms* [~flow-id ~form-id])]
-       ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true)))))
+     (swap! flow-storm.tracer/*init-traced-forms* conj [~flow-id ~form-id])
+     ~(instrument-form (conj forms 'do) orig-form [] (assoc ctx :outer-form? true))))
 
 ;; TODO: can this be mixed with normal fn* body instrumentation?
 (defn instrument-function-bodies [[_ & arities :as form] ctx wrapper]
@@ -645,7 +645,7 @@
      :method-body mbody}))
 
 (defn fix-outer-form-instrumentation [form orig-form {:keys [compiler disable] :as ctx}]
-  (let [outer-form (if (disable :fn-call) form (unwrap-instrumentation form))
+  (let [outer-form (if (disable :expr) form (unwrap-instrumentation form))
         instrument-bodies (fn [fn-name fn-body]
                             (instrument-function-bodies
                              fn-body

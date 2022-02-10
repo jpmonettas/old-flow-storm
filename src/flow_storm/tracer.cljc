@@ -10,10 +10,10 @@
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
 
-(defonce per-form-traces (atom {}))
-
 (def ^:dynamic *flow-id* nil)
-(def ^:dynamic *init-traced-forms* #{})
+(def ^:dynamic *stack-count-limit* nil)
+(def ^:dynamic *init-traced-forms* nil)
+(def ^:dynamic *stacks-state* nil)
 
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
@@ -35,24 +35,54 @@
   (println "[Holding]" event)
   (swap! pre-conn-events-holder conj event))
 
+#_(defn ws-send
+  "Send the event thru the connected websocket. If the websocket
+  connection is not ready, hold it in `pre-conn-events-holder`"
+  [[ttype m :as t]]
+  (let [tid (:thread-id m)]
+    (cond
+      
+      (= ttype :fn-call-trace)
+      (let [f (str (:fn-ns m) "/" (:fn-name m))]
+        (swap! *stacks-state* (fn [ss]                            
+                              (let [ss' (update-in ss [tid :current-stack] conj f) ;; update the current-stack
+                                    {:keys [blocked current-stack]} (get ss' tid)
+                                    ss'' (update-in ss' [tid :stack-counts] ;; inc the stack count for current-stack
+                                                    (fn [sc]                                           
+                                                      (let [updated-stack-count (inc (get sc current-stack 0))]
+                                                        (assoc sc current-stack updated-stack-count))))]
+                                
+                                (if (and (not blocked) (> (get-in ss'' [tid :stack-counts current-stack]) *stack-count-limit*))
+                                  
+                                  (assoc-in ss'' [tid :blocked] current-stack)
+                                  ss'')))))
+      
+      (and (= ttype :exec-trace) (:outer-form? m))
+      (swap! *stacks-state* (fn [ss]
+                            (let [blocked (get-in ss [tid :blocked])
+                                  current-stack (get-in ss [tid :current-stack])
+                                  ss' (if (and current-stack (= (pop blocked) current-stack)) ;; unblock if we got to unblock stack position
+                                        (assoc-in ss [tid :blocked] nil)
+                                        ss)]
+                              (update-in ss' [tid :current-stack] pop) ;; pop the current stack
+                              ))))    
+    (let [blocked? (and tid
+                        (get-in @*stacks-state* [tid :blocked]))]
+
+      (if blocked?
+        nil
+        ((or @send-fn-a hold-event) t)))))
+
 (defn ws-send
   "Send the event thru the connected websocket. If the websocket
   connection is not ready, hold it in `pre-conn-events-holder`"
-  [[_ {:keys [form-id]} :as event]]
-  ((or @send-fn-a hold-event) event)
-  #_(if (or (nil? form-id)
-            (<= (get @per-form-traces form-id 0) 50))
-    (do 
-      (when form-id (swap! per-form-traces update form-id (fnil inc 0)))
-      
-      ((or @send-fn-a hold-event) event))
-
-    (println "WARN hit trace limit for form id " form-id ". No more forms are going to be traced for it.")))
+  [[ttype m :as t]]
+  ((or @send-fn-a hold-event) t))
 
 (defn init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
   [{:keys [form-id flow-id args-vec fn-name ns]} form]
-  (when-not (contains? *init-traced-forms* [flow-id form-id])
+  (when-not (contains? @*init-traced-forms* [flow-id form-id])
     (let [trace-data (cond-> {:flow-id *flow-id*
                               :form-id form-id
                               :form (pr-str form)
@@ -77,7 +107,7 @@
 
     result))
 
-(defn fn-call-trace [form-id ns fn-name args-vec]
+(defn fn-call-trace [form-id ns fn-name args-vec]  
   (ws-send [:fn-call-trace {:flow-id *flow-id*
                             :form-id form-id
                             :fn-name fn-name
@@ -165,9 +195,10 @@
                  (println "Connection opened"))
                (onMessage [^String message])
                (onClose [code reason remote?]
-                 (println "Connection closed"))
+                 (println "Connection closed" [code reason remote?]))
                (onError [^Exception e]
                  (println "WS ERROR" e)))]
+     (.setConnectionLostTimeout wsc 0)
      (.connect wsc)
      (reset! send-fn-a (fn [event]
                          (.send wsc (json/write-value-as-string event)))))))
@@ -236,3 +267,13 @@
 
                            ;; empty the events holder atom
                            (reset! pre-conn-events-holder [])))))))))
+
+(comment
+
+  
+  (do
+    (reset! stacks-state {})    
+    (doseq [t example-traces]
+     (dummy-send t)))
+  
+  )

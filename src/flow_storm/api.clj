@@ -38,7 +38,7 @@
      :on-outer-form-fn 'flow-storm.tracer/init-trace
      :compiler         (i/target-from-env env)
      :form-id          form-id
-     :disable          #{}}))
+     :disable          #{} #_#{:expr :binding}}))
 
 (defn- pprint-on-err [x]
   (binding [*out* *err*] (pp/pprint x)))
@@ -108,9 +108,34 @@
 
   #trace
   (defn boo [xs]
-    (reduce + (pmap factorial xs)))
+    (reduce + (map factorial xs)))
 
-  (boo [2 4 5])
+  (do
+    (binding [flow-storm.tracer/*stack-count-limit* 1
+              flow-storm.tracer/*stacks-state* (atom {})
+              flow-storm.tracer/*init-traced-forms* (atom #{})]
+      (boo [2 3 2 4])))
 
   (factorial 5)
+
+  (require '[clojure.core.async :as async])
+
+  (def c (async/chan 10))
+
+  #trace
+  (defn a-fun [cc]
+    (async/go
+      (let [a (async/<! c)
+            b (async/<! c)
+            d (async/<! c)]
+        (+ a b d))))
+
+  (do
+    (async/>!! c 10)
+    (Thread/sleep 1000)
+    (async/>!! c 42)
+    (Thread/sleep 1000)
+    (async/>!! c 1)
+    (async/<!! (a-fun c)))
+
   )
