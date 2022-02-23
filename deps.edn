@@ -1,5 +1,8 @@
 {:paths ["src"]
- :deps {org.clojure/clojurescript {:mvn/version "1.10.758"} ;; TODO: Try to remove a dependency on this one
+ ;; TODO: Try to remove a dependency on this one
+ :deps {org.clojure/clojurescript {;;:mvn/version "1.10.773"
+                                   :local/root "/home/jmonetta/my-projects/clojurescript"
+                                   }
         juji/editscript           {:mvn/version "0.4.6"}
         metosin/jsonista {:mvn/version "0.3.4"}
         org.java-websocket/Java-WebSocket {:mvn/version "1.5.2"}}

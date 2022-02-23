@@ -284,7 +284,8 @@
                                 `(~a1 ~left-vec ~(instrument-coll right-vec ctx) ~(instrument else ctx)))))
           (catch Exception e
             (binding [*print-length* 4
-                      *print-level*  2]
+                      *print-level*  2
+                      *out* *err*]
               (println "Failed to instrument" name args
                        ", please file a bug report: " e))
             args))))
@@ -313,23 +314,8 @@
     form
 
     (let [trace-data (cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id :flow-id flow-id}
-                       outer-form? (assoc :outer-form? outer-form?))
-          catch-expr (case compiler
-                       :clj `(catch Exception e#
-                               (~on-expr-exec-fn nil
-                                {:message (.toString e#)}
-                                ~trace-data
-                                (quote ~orig))
-                               (throw e#))
-                       :cljs `(catch :default e#
-                                (~on-expr-exec-fn nil
-                                 {:message (.toString e#)}
-                                 ~trace-data
-                                 (quote ~orig))
-                                (throw e#)))]
-      `(try
-         (~on-expr-exec-fn ~form nil ~trace-data (quote ~orig))
-         ~catch-expr))))
+                       outer-form? (assoc :outer-form? outer-form?))]
+      `(~on-expr-exec-fn ~form nil ~trace-data (quote ~orig)))))
 
 ;; (defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form?]}]
 ;;   `(~on-expr-exec-fn ~form nil

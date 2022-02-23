@@ -9,11 +9,11 @@
 
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
-
+(def ^:dynamic *print-length* nil)
 (def ^:dynamic *flow-id* nil)
-(def ^:dynamic *stack-count-limit* nil)
+;; (def ^:dynamic *stack-count-limit* nil)
 (def ^:dynamic *init-traced-forms* nil)
-(def ^:dynamic *stacks-state* nil)
+;; (def ^:dynamic *stacks-state* nil)
 
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
@@ -21,7 +21,7 @@
 
 (defn serialize-val [v]  
   (try
-    (binding [*print-length* (or *print-length* 50)]
+    (binding [clojure.core/*print-length* (or *print-length* 50)]
       (pr-str v))
     (catch Exception e      
       (println "Can't serialize this, skipping " (type v))
@@ -34,6 +34,7 @@
   [event]
   (println "[Holding]" event)
   (swap! pre-conn-events-holder conj event))
+
 
 #_(defn ws-send
   "Send the event thru the connected websocket. If the websocket
@@ -77,7 +78,10 @@
   "Send the event thru the connected websocket. If the websocket
   connection is not ready, hold it in `pre-conn-events-holder`"
   [[ttype m :as t]]
-  ((or @send-fn-a hold-event) t))
+  (try
+    ((or @send-fn-a hold-event) t)
+    (catch Exception e
+      (println "WARN Couldn't send" t))))
 
 (defn init-trace
   "Instrumentation function. Sends the `:init-trace` trace"

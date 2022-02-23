@@ -39,7 +39,9 @@
 
 (defn trace-var-clj [var-symb]
   (binding [fsi/*environment* {}]
-    (let [form (read-string {:read-cond :allow} (repl/source-fn var-symb))]
+    (let [form (binding [*ns* (find-ns (symbol (namespace var-symb)))]
+                 ;; read-string will read namespaced keywords with current *ns*
+                 (read-string {:read-cond :allow} (repl/source-fn var-symb)))]
       (if form
         (let [ctx (initial-ctx-clj form)
               inst-form (fsi/instrument-all form ctx)]
@@ -48,32 +50,36 @@
 
         (throw (Exception. (str "Couldn't find source for " var-symb)))))))
 
-(defn all-ns-with-prefix [prefix]
+(defn all-ns-with-prefix [prefix {:keys [excluding]}]
   (->> (all-ns)
        (keep (fn [ns]
-               (when (str/starts-with? (str (ns-name ns)) prefix)
-                 ns)))))
+               (let [nsname (str (ns-name ns))]
+                 (when (and (not (excluding nsname))
+                            (str/starts-with? nsname prefix))
+                  ns))))))
 
 (defn ns-vars [ns]
   (vals (ns-interns ns)))
 
-(defn trace-all-ns-vars [ns stats*]
+(defn trace-all-ns-vars [ns stats* {:keys [skip-vars]}]
   (let [vars (ns-vars ns)]
     (swap! stats* assoc-in [(ns-name ns) :of] (count vars))
     (doseq [v vars]
-      (try
-        (print "Instrumenting" (symbol v))
-        (trace-var-clj (symbol v))
-        (println " ( OK )")
-        (swap! stats* update-in [(ns-name ns) :instrumented] inc)
-        (catch Exception e
-          (println " ERROR: couldn't instrument this code because " (.getMessage e))
-          #_(.printStackTrace e))))))
+      (if (skip-vars (str (symbol v)))
+        (println "SKIPPING" v)
+        (try
+          (print "Instrumenting" v)
+          (trace-var-clj (symbol v))
+          (println " ( OK )")
+          (swap! stats* update-in [(ns-name ns) :instrumented] inc)
+          (catch Exception e
+            (println " ERROR: couldn't instrument this code because " (.getMessage e))
+            #_(.printStackTrace e)))))))
 
-(defn trace-all-ns [all-ns]
+(defn trace-all-ns [all-ns opts]
   (let [stats* (atom (zipmap (map ns-name all-ns) (repeat {:instrumented 0})))]
     (doseq [ns all-ns]
-      (trace-all-ns-vars ns stats*))
+      (trace-all-ns-vars ns stats* opts))
 
     (println "\n\n\nSTATS\n")
 
@@ -93,14 +99,25 @@
 
   (do
     (def t (Thread. (fn []
-                      (binding [flow-storm.tracer/*stack-count-limit* 5
-                                flow-storm.tracer/*stacks-state* (atom {})
-                                flow-storm.tracer/*init-traced-forms* (atom #{})]
+                      (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
                         (cljs-main/-main ["--compile" "hello-world.core"])))))
     (.start t))
 
   (.stop t)
 
   (take 10 (sort-by second > @flow-storm.tracer/fn-calls-count))
+
+  (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")
+
+  )
+
+(defn runner [& args]
+  #_(fsa/connect)
+  (trace-all-ns (all-ns-with-prefix "cljs.analyzer" {:excluding #{""}})
+                {:skip-vars #{}})
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
+            flow-storm.tracer/*print-length* 2]
+    (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs"))
+
 
   )

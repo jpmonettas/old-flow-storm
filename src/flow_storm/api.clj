@@ -100,6 +100,7 @@
 
 (comment
   (connect)
+
   #trace
   (defn factorial [n]
     (if (zero? n)
@@ -110,32 +111,36 @@
   (defn boo [xs]
     (reduce + (map factorial xs)))
 
-  (do
-    (binding [flow-storm.tracer/*stack-count-limit* 1
-              flow-storm.tracer/*stacks-state* (atom {})
-              flow-storm.tracer/*init-traced-forms* (atom #{})]
-      (boo [2 3 2 4])))
 
-  (factorial 5)
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
+    (boo [2 3 2 4]))
 
-  (require '[clojure.core.async :as async])
-
-  (def c (async/chan 10))
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
+    (factorial 5))
 
   #trace
-  (defn a-fun [cc]
-    (async/go
-      (let [a (async/<! c)
-            b (async/<! c)
-            d (async/<! c)]
-        (+ a b d))))
+  (defn bar [n]
+    (atom {:hello [1 2 3 n]}))
 
-  (do
-    (async/>!! c 10)
-    (Thread/sleep 1000)
-    (async/>!! c 42)
-    (Thread/sleep 1000)
-    (async/>!! c 1)
-    (async/<!! (a-fun c)))
+  #trace
+  (defn tester []
+    (map bar (range 2)))
+
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
+    (tester))
+
+  #trace
+  (defn something-regexp []
+    (re-find #"e" "hello"))
+
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
+    (something-regexp))
+
+  #trace
+  (defn blabla "do something \" \" nicel "[]
+    (str "somethings \"bla \" " "other"))
+
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
+    (blabla))
 
   )
