@@ -45,7 +45,8 @@
 
 (defmacro trace
   "Recursively instrument a form for tracing."
-  ([form] `(trace nil ~form)) ;; need to do this so multiarity macros work
+  ;; TODO: make it possible with the trace macro to set a flow id
+  ([form] `(trace 0 ~form)) ;; need to do this so multiarity macros work
   ([flow-id form]
    (binding [i/*environment* &env]
      (let [ctx (-> (initial-ctx form &env)

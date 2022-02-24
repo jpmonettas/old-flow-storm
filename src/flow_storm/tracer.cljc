@@ -5,7 +5,8 @@
             [jsonista.core :as json])
   (:import [java.net URI]
            [org.java_websocket.client WebSocketClient]
-           [org.java_websocket.handshake ServerHandshake]))
+           [org.java_websocket.handshake ServerHandshake]
+           [java.util.concurrent ArrayBlockingQueue]))
 
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
@@ -201,11 +202,27 @@
                (onClose [code reason remote?]
                  (println "Connection closed" [code reason remote?]))
                (onError [^Exception e]
-                 (println "WS ERROR" e)))]
+                 (println "WS ERROR" e)))
+         trace-queue (ArrayBlockingQueue. 20000000)
+         stats (atom {:trace-count 0})
+         send-thread (Thread.
+                      (fn []
+                        (while true                         
+                          (let [trace (.take trace-queue)                                
+                                qsize (.size trace-queue)]
+                            (when (zero? (mod (get @stats :trace-count) 100000))
+                              (println "STATS" @stats))
+                            (swap! stats (fn [s]
+                                           (-> s
+                                               (assoc :queue-size qsize)
+                                               (update :trace-count inc))))                            
+                            (.send wsc (json/write-value-as-string trace))))))]     
      (.setConnectionLostTimeout wsc 0)
      (.connect wsc)
-     (reset! send-fn-a (fn [event]
-                         (.send wsc (json/write-value-as-string event)))))))
+     (.start send-thread)
+     (reset! send-fn-a (fn [trace]                         
+                         (.put trace-queue trace)))
+     stats)))
 
 #_(defn connect
   "Connects to the flow-storm debugger.

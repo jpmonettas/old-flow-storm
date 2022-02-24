@@ -506,10 +506,7 @@
   "Add some special instrumentation that is needed only on the outer form. Like
   tracing the form source code, and wrapping *flow-id* dynamic bindings"
   [{:keys [orig-form args-vec fn-name form-ns form-id form-flow-id flow-id on-outer-form-fn on-fn-call-fn] :as ctx} forms]
-  `(binding [flow-storm.tracer/*flow-id* (or ~flow-id
-                                             flow-storm.tracer/*flow-id*
-                                             ;; TODO: maybe change this to UUID
-                                             (rand-int 10000))]
+  `(do
      (~on-outer-form-fn {:form-id ~form-id
                          :flow-id ~flow-id
                          :ns ~form-ns}
@@ -538,7 +535,6 @@
 
 (defn unwrap-instrumentation [inst-form]
   (-> inst-form
-      second   ;; discard the try
       second)) ;; discard the on-expr-exec-fn (trace-and-return)
 
 ;; ClojureScript multi arity defn expansion is much more involved than

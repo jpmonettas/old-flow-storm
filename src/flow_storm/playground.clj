@@ -105,19 +105,37 @@
 
   (.stop t)
 
-  (take 10 (sort-by second > @flow-storm.tracer/fn-calls-count))
-
   (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")
 
   )
 
+;; Run with : clj -X flow-storm.playground/runner
 (defn runner [& args]
-  #_(fsa/connect)
-  (trace-all-ns (all-ns-with-prefix "cljs.analyzer" {:excluding #{""}})
-                {:skip-vars #{}})
-  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
-            flow-storm.tracer/*print-length* 2]
-    (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs"))
+  (fsa/connect)
 
+  (time
+   (trace-all-ns (all-ns-with-prefix "cljs." {:excluding #{""}})
+                 {:skip-vars #{}}))
 
+  (time
+   (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
+             flow-storm.tracer/*print-length* 2
+             flow-storm.tracer/*flow-id* 0]
+     (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")))
+
+  (System/exit 0)
+
+  ;; -- No instrumentation --
+  ;; "Elapsed time: 14886.711692 msecs" ~ 14 secs
+
+  ;; -- Analyzer only FN instrumentation --
+  ;; Instrumented codebase 229/308 (74%) "Elapsed time: 2883.123415 msecs" ~ 3 secs
+  ;; "Elapsed time: 326844.446424 msecs" ~ 5 min
+
+  ;; -- Full FN instrumentation --
+  ;; Instrumented codebase 764/1241 (61%) "Elapsed time: 9712.255063 msecs" ~ 10 secs
+  ;; "Elapsed time: 391126.870646 msecs" ~ 6.5 min 21M traces
+
+  ;; -- Full fn instrumentation after thread --
+  ;; "Elapsed time: 252373.632364 msecs" ~ 4.2 min
   )
