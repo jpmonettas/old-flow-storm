@@ -90,15 +90,16 @@
   (when-not (contains? @*init-traced-forms* [flow-id form-id])
     (let [trace-data (cond-> {:flow-id *flow-id*
                               :form-id form-id
-                              :form (pr-str form)
+                              :form form
                               :ns ns
                               :timestamp (get-timestamp)}
                        flow-id  (assoc :fixed-flow-id-starter? true))]
-      (ws-send [:init-trace trace-data]))))
+      (ws-send [:init-trace trace-data])
+      (swap! *init-traced-forms* conj [flow-id form-id]))))
 
 (defn expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
-  [result err {:keys [coor outer-form? form-id]} orig-form]
+  [result err {:keys [coor outer-form? form-id]}]
   (let [trace-data (cond-> {:flow-id *flow-id*
                             :form-id form-id
                             :coor coor

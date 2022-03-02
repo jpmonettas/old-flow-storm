@@ -11,7 +11,7 @@
      :on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
-     :on-outer-form-fn 'flow-storm.tracer/init-trace
+     :on-outer-form-init-fn 'flow-storm.tracer/init-trace
      :compiler         :clj
      :disable          #{:expr :binding} ;; :expr :binding
      :form-id          form-id}))

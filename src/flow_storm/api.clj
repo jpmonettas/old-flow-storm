@@ -35,7 +35,7 @@
     {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
-     :on-outer-form-fn 'flow-storm.tracer/init-trace
+     :on-outer-form-init-fn 'flow-storm.tracer/init-trace
      :compiler         (i/target-from-env env)
      :form-id          form-id
      :disable          #{} #_#{:expr :binding}}))
@@ -54,17 +54,17 @@
                           :form-ns (str (ns-name *ns*))))
            inst-code (-> form
                          (i/instrument-all ctx)
-                         (i/fix-outer-form-instrumentation form ctx))]
+                         i/maybe-unwrap-outer-form-instrumentation)]
 
        ;; Uncomment to debug
        ;; Printing on the *err* stream is important since
        ;; printing on standard output messes  with clojurescript macroexpansion
        #_(pprint-on-err (i/macroexpand-all form))
-       #_(pprint-on-err inst-code')
+       #_(pprint-on-err inst-code)
 
        inst-code))))
 
-(defmacro trace-var [var-symb]
+#_(defmacro trace-var [var-symb]
   (binding [i/*environment* &env]
     (let [compiler (i/target-from-env &env)
           form (some-> (case compiler
@@ -102,6 +102,7 @@
 (comment
   (connect)
 
+
   #trace
   (defn factorial [n]
     (if (zero? n)
@@ -113,11 +114,10 @@
     (reduce + (map factorial xs)))
 
 
-  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
-    (boo [2 3 2 4]))
-
-  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
-    (factorial 5))
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
+            flow-storm.tracer/*print-length* 1000
+            flow-storm.tracer/*flow-id* 0]
+    (boo [2 3 4]))
 
   #trace
   (defn bar [n]
@@ -143,5 +143,40 @@
 
   (binding [flow-storm.tracer/*init-traced-forms* (atom #{})]
     (blabla))
+
+
+
+
+  #trace
+  (defn boo [xs]
+    (reduce + (map
+               (fn factorial [n]
+                 (if (zero? n)
+                   1
+                   (* n (factorial (dec n)))))
+               xs)))
+
+  #trace
+  (defn boo [xs]
+    (reduce #(let [a 5] (+ %1 %2 a))
+            0
+            (map
+             (fn [n] (* n n))
+             xs)))
+
+
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
+            flow-storm.tracer/*print-length* 1000
+            flow-storm.tracer/*flow-id* 0]
+    (boo [2 3]))
+  (clojure.walk/macroexpand-all '(trace (defn fn-name ([]))))
+  (clojure.walk/macroexpand-all '(trace (defn fn-name "doc string" ([]))))
+  (clojure.walk/macroexpand-all '(trace (defn fn-name ([]) ([a]))))
+  (clojure.walk/macroexpand-all '(trace (defn fn-name [])))
+  (clojure.walk/macroexpand-all '(trace (fn fn-name ([]) ([a]))))
+  (clojure.walk/macroexpand-all '(trace (fn ([]) ([a]))))
+  (clojure.walk/macroexpand-all '(trace (defn fn-name []
+                                          (map (fn [x] (inc x))
+                                               (range)))))
 
   )
