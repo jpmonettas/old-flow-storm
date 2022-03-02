@@ -212,25 +212,16 @@
             '#{if do recur throw finally try monitor-exit monitor-enter} (instrument-coll args ctx)
                  '#{new} (cons (first args) (instrument-coll (rest args) ctx))
                  '#{quote & var clojure.core/import*} args
-                 '#{.} (let [ctx' (if (expanded-defmethod-form? form ctx)
-                                    ;; we are defining a mutimethod
-                                    ;; set the context for the next fn* down the road
-                                    (assoc ctx
-                                           :defn-def {:fn-name (first args)
-                                                      :multimethod? true
-                                                      :dispatch-val (nth args 2)
-                                                      :orig-form (::original-form (meta form))})
-                                    ctx)]
-                         (list* (first args)
-                               ;; To handle the case when second argument to dot call
-                               ;; is a list e.g (. class-name (method-name args*))
-                               ;; The values present as args* should be instrumented.
-                               (let [s (second args)]
-                                 (if (coll? s)
-                                   (->> (instrument-coll (rest s) ctx')
-                                        (concat (cons (first s) '())))
-                                   s))
-                               (instrument-coll (rest (rest args)) ctx')))
+                 '#{.} (list* (first args)
+                              ;; To handle the case when second argument to dot call
+                              ;; is a list e.g (. class-name (method-name args*))
+                              ;; The values present as args* should be instrumented.
+                              (let [s (second args)]
+                                (if (coll? s)
+                                  (->> (instrument-coll (rest s) ctx)
+                                       (concat (cons (first s) '())))
+                                  s))
+                              (instrument-coll (rest (rest args)) ctx))
                  '#{def} (let [[sym & rargs] args]
                            (list* (merge-meta sym
                                     ;; Instrument the metadata, because
@@ -239,16 +230,7 @@
                                     ;; to be used later for meta stripping
                                     {::def-symbol true})
 
-                                  (map (fn [arg]
-                                         (if (and (seq? arg) (= (first arg) 'fn*))
-                                           ;; we are defining a function
-                                           ;; set the context for the next fn* down the road
-                                           (instrument arg (assoc ctx
-                                                                  :defn-def {:fn-name sym
-                                                                             :orig-form (::original-form (meta form))}))
-                                           ;; non function value
-                                           (instrument arg ctx)))
-                                       rargs)))
+                                  (map (fn [arg] (instrument arg ctx)) rargs)))
 
                  '#{set!} (list (first args)
                                 (instrument (second args) ctx))
@@ -419,6 +401,31 @@
   (or (dont-break-forms name)
       (contains-recur? form)))
 
+(defn- expanded-clojure-core-extend-form? [[symb] ctx]
+  (= symb 'clojure.core/extend))
+
+(defn- expanded-extend-protocol-form? [form ctx]
+  (and (seq? form)
+       (= 'do (first form))
+       (seq? (second form))
+       (= 'clojure.core/extend (-> form second first))))
+
+(defn- instrument-core-extend-form [[_ ext-type & exts :as form] ctx]
+  (let [extensions (->> (partition 2 exts)
+                        (mapcat (fn [[etype emap]]
+                               (let [inst-emap (reduce-kv
+                                                (fn [r k f]
+                                                  (assoc r k (instrument f
+                                                                         (assoc ctx :defn-def {:fn-name (symbol (name k))
+                                                                                               :orig-form (or
+                                                                                                           (-> ctx :defn-def :orig-form)
+                                                                                                           (::original-form (meta form)))}))))
+                                                {}
+                                                emap)]
+                                 (list etype inst-emap)))))]
+   `(clojure.core/extend ~ext-type ~@extensions)))
+
+
 (defn- instrument-function-like-form
   "Instrument form representing a function call or special-form."
   [[name :as form] ctx]
@@ -426,14 +433,44 @@
     ;; If the car is not a symbol, nothing fancy is going on and we
     ;; can instrument everything.
     (maybe-instrument (instrument-coll form ctx) ctx)
-    (if (special-symbol? name)
-      ;; If special form, thread with care.
-      (if (dont-break? form)
-        (instrument-special-form form ctx)
-        (maybe-instrument (instrument-special-form form ctx) ctx))
-      ;; Otherwise, probably just a function. Just leave the
-      ;; function name and instrument the args.
-      (maybe-instrument (instrument-function-call form ctx) ctx))))
+
+    (let [ctx (cond ;; UPDATE `ctx` !!!
+                ;; we are defining a mutimethod
+                ;; set the context for the next fn* down the road
+                (expanded-defmethod-form? form ctx)
+                (assoc ctx
+                       :defn-def {:fn-name (nth form 1)
+                                  :multimethod? true
+                                  :dispatch-val (nth form 2)
+                                  :orig-form (::original-form (meta form))})
+
+
+                (expanded-defn-form? form)
+                (assoc ctx
+                       :defn-def {:fn-name (nth form 1)
+                                  :orig-form (::original-form (meta form))})
+
+                (expanded-extend-protocol-form? form ctx)
+                (assoc ctx
+                       :defn-def {:orig-form (::original-form (meta form))})
+
+                :else
+                ctx)]
+      (cond
+
+        (expanded-clojure-core-extend-form? form ctx)
+        (instrument-core-extend-form form ctx)
+
+        ;; If special form, thread with care.
+        (special-symbol? name)
+        (if (dont-break? form)
+          (instrument-special-form form ctx)
+          (maybe-instrument (instrument-special-form form ctx) ctx))
+
+        ;; Otherwise, probably just a function. Just leave the
+        ;; function name and instrument the args.
+        :else
+        (maybe-instrument (instrument-function-call form ctx) ctx)))))
 
 (defn- instrument
   "Walk through form and return it instrumented with traces. "
@@ -535,7 +572,6 @@
 
 (defn instrument-tagged-code
   [form ctx]
-
   (-> form
       ;; Expand so we don't have to deal with macros.
       (macroexpand-all ::original-form)
@@ -560,9 +596,9 @@
 ;;                   (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
 
 (defn instrument-all [form ctx]
-  (let [inst-code (-> (with-meta form {::original-form form})
-                      (tag-form-recursively) ;; tag all forms adding ::i/coor
-                      (instrument-tagged-code ctx))]
+  (let [form-with-meta (with-meta form {::original-form form})
+        tagged-form (tag-form-recursively form-with-meta) ;; tag all forms adding ::i/coor
+        inst-code (instrument-tagged-code tagged-form ctx)]
     inst-code))
 
 (defn expanded-def-form? [form]
@@ -570,12 +606,13 @@
        (= (first form) 'def)))
 
 (defn expanded-defmethod-form? [form {:keys [compiler]}]
-  (or (and (= compiler :clj)
-           (= (count form) 5)
-           (= (nth form 2) 'clojure.core/addMethod))
-      (and (= compiler :cljs)
-           (= (count form) 4)
-           (= (first form) 'cljs.core/-add-method))))
+  (and (seq? form)
+       (or (and (= compiler :clj)
+            (= (count form) 5)
+            (= (nth form 2) 'clojure.core/addMethod))
+       (and (= compiler :cljs)
+            (= (count form) 4)
+            (= (first form) 'cljs.core/-add-method)))))
 
 (defn expanded-defn-form? [form]
   (and (= (count form) 3)
@@ -599,7 +636,8 @@
 
 (defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
   (if (or (expanded-def-form? (second inst-form))
-          (expanded-defmethod-form? (second inst-form) ctx))
+          (expanded-defmethod-form? (second inst-form) ctx)
+          (expanded-extend-protocol-form? (second inst-form) ctx))
 
     ;; discard the on-expr-exec-fn
     (second inst-form)
