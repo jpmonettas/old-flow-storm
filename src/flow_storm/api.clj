@@ -54,7 +54,7 @@
                           :form-ns (str (ns-name *ns*))))
            inst-code (-> form
                          (i/instrument-all ctx)
-                         i/maybe-unwrap-outer-form-instrumentation)]
+                         (i/maybe-unwrap-outer-form-instrumentation ctx))]
 
        ;; Uncomment to debug
        ;; Printing on the *err* stream is important since
@@ -178,5 +178,10 @@
   (clojure.walk/macroexpand-all '(trace (defn fn-name []
                                           (map (fn [x] (inc x))
                                                (range)))))
+
+  (clojure.walk/macroexpand-all '(trace (defmethod some-method :some-value [arg1 arg2]
+                                          (some-fn-call)
+                                          (some-fn-call2))))
+
 
   )

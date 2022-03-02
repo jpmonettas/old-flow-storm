@@ -212,16 +212,25 @@
             '#{if do recur throw finally try monitor-exit monitor-enter} (instrument-coll args ctx)
                  '#{new} (cons (first args) (instrument-coll (rest args) ctx))
                  '#{quote & var clojure.core/import*} args
-                 '#{.} (list* (first args)
-                              ;; To handle the case when second argument to dot call
-                              ;; is a list e.g (. class-name (method-name args*))
-                              ;; The values present as args* should be instrumented.
-                              (let [s (second args)]
-                                (if (coll? s)
-                                  (->> (instrument-coll (rest s) ctx)
-                                       (concat (cons (first s) '())))
-                                  s))
-                              (instrument-coll (rest (rest args)) ctx))
+                 '#{.} (let [ctx' (if (expanded-defmethod-form? form ctx)
+                                    ;; we are defining a mutimethod
+                                    ;; set the context for the next fn* down the road
+                                    (assoc ctx
+                                           :defn-def {:fn-name (first args)
+                                                      :multimethod? true
+                                                      :dispatch-val (nth args 2)
+                                                      :orig-form (::original-form (meta form))})
+                                    ctx)]
+                         (list* (first args)
+                               ;; To handle the case when second argument to dot call
+                               ;; is a list e.g (. class-name (method-name args*))
+                               ;; The values present as args* should be instrumented.
+                               (let [s (second args)]
+                                 (if (coll? s)
+                                   (->> (instrument-coll (rest s) ctx')
+                                        (concat (cons (first s) '())))
+                                   s))
+                               (instrument-coll (rest (rest args)) ctx')))
                  '#{def} (let [[sym & rargs] args]
                            (list* (merge-meta sym
                                     ;; Instrument the metadata, because
@@ -556,13 +565,46 @@
                       (instrument-tagged-code ctx))]
     inst-code))
 
-(defn instrumented-def? [[_ x]]
-  (and (seq? x)
-       (= (first x) 'def)))
+(defn expanded-def-form? [form]
+  (and (seq? form)
+       (= (first form) 'def)))
 
-(defn maybe-unwrap-outer-form-instrumentation [inst-form]
-  (if (instrumented-def? inst-form)
-    (second inst-form) ;; discard the on-expr-exec-fn
+(defn expanded-defmethod-form? [form {:keys [compiler]}]
+  (or (and (= compiler :clj)
+           (= (count form) 5)
+           (= (nth form 2) 'clojure.core/addMethod))
+      (and (= compiler :cljs)
+           (= (count form) 4)
+           (= (first form) 'cljs.core/-add-method))))
+
+(defn expanded-defn-form? [form]
+  (and (= (count form) 3)
+       (= 'def (first form))
+       (let [[_ _ x] form]
+         (and (seq? x)
+              (= (first x) 'fn*)))))
+
+(defn expanded-form-type [form {:keys [compiler] :as ctx}]
+  (when (seq? form)
+    (cond
+
+      (expanded-defn-form? form) :defn
+
+      (and (= compiler :cljs)
+           (cljs-multi-arity-defn? form))
+      :defn-cljs-multi-arity
+
+      (expanded-defmethod-form? form ctx)
+      :defmethod)))
+
+(defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
+  (if (or (expanded-def-form? (second inst-form))
+          (expanded-defmethod-form? (second inst-form) ctx))
+
+    ;; discard the on-expr-exec-fn
+    (second inst-form)
+
+    ;; else do nothing
     inst-form))
 
 ;; ClojureScript multi arity defn expansion is much more involved than
@@ -611,36 +653,13 @@
         inst-code `(do ~xdef ~@inst-sets-forms)]
     inst-code))
 
-(defn outer-form-type [outer-form {:keys [compiler]}]
-  (when (seq? outer-form)
-    (cond
-
-      (and (= (count outer-form) 3)
-           (= 'def (first outer-form))
-           (let [[_ _ x] outer-form]
-             (and (seq? x)
-                  (= (first x) 'fn*))))
-      :defn
-
-      (and (= compiler :cljs)
-           (cljs-multi-arity-defn? outer-form))
-      :defn-cljs-multi-arity
-
-      (or (and (= compiler :clj)
-               (= (count outer-form) 5)
-               (= (nth outer-form 2) 'clojure.core/addMethod))
-          (and (= compiler :cljs)
-               (= (count outer-form) 4)
-               (= (first outer-form) 'cljs.core/-add-method)))
-      :defmethod)))
-
-(defn parse-defn-expansion [defn-expanded-form]
+#_(defn parse-defn-expansion [defn-expanded-form]
   ;; (def my-fn (fn* ([])))
   (let [[_ fn-name fn-body] defn-expanded-form]
     {:fn-name fn-name
      :fn-body fn-body}))
 
-(defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
+#_(defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
   (let [[mname mval mbody] (case compiler
 
                              ;; (. my-method clojure.core/addMethod :bla (fn* [...] ...))
