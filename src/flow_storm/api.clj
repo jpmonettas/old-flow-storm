@@ -183,5 +183,87 @@
                                           (some-fn-call)
                                           (some-fn-call2))))
 
+  (defprotocol Thing
+    (weight [_])
+    (volume [_]))
+
+  #trace
+  (extend-protocol Thing
+    String
+    (weight [s]
+      (->> s
+           (filter #(= % \W))
+           count))
+    (volume [s]
+      (->> s
+           (filter #(= % \V))
+           count)))
+
+  (defmulti amulti type)
+
+  #trace
+  (defmethod amulti java.lang.String [s]
+    (volume (str "VV" s s)))
+
+  #trace
+  (defmethod amulti java.lang.Long [l]
+    (let [a 5
+          b (+ a l 10)]
+      (+ a b)))
+
+  #trace
+  (defn tha-fn []
+    (map amulti
+         ["VVWV" 10 "WV" 5]))
+
+  (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
+            flow-storm.tracer/*print-length* 1000
+            flow-storm.tracer/*flow-id* 0]
+    (tha-fn))
+
 
   )
+(comment
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(extend-protocol IEventType
+
+  EventTarget
+  (event-types
+    [this]
+    5)
+
+  OtherProto
+  (some-method [this] 5))
+
+(do
+ (clojure.core/extend
+  EventTarget
+  IEventType
+  {:event-types (fn* ([this] 5))})
+ (clojure.core/extend
+  OtherProto
+  IEventType
+  {:some-method (fn* ([this] 5))}))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(extend-type XhrIo
+
+  IConnection
+  (transmit
+    ([this uri])
+    ([this uri method]))
+
+  event/IEventType
+  (event-types [this]
+    ))
+
+(clojure.core/extend
+ XhrIo
+ IConnection
+ {:transmit (fn* ([this uri]) ([this uri method]))}
+ event/IEventType
+ {:event-types (fn* ([this]))})
+
+
+)

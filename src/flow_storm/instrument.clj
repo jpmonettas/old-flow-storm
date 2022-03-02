@@ -401,6 +401,46 @@
   (or (dont-break-forms name)
       (contains-recur? form)))
 
+(defn cljs-multi-arity-defn? [[x1 & x2]]
+  (when (= x1 'do)
+    (let [[xdef & xset] (keep first x2)]
+      (and (= xdef 'def)
+           (pos? (count xset))
+           (every? #(= 'set! %) xset)))))
+
+(defn expanded-def-form? [form]
+  (and (seq? form)
+       (= (first form) 'def)))
+
+(defn expanded-defmethod-form? [form {:keys [compiler]}]
+  (and (seq? form)
+       (or (and (= compiler :clj)
+            (= (count form) 5)
+            (= (nth form 2) 'clojure.core/addMethod))
+       (and (= compiler :cljs)
+            (= (count form) 4)
+            (= (first form) 'cljs.core/-add-method)))))
+
+(defn expanded-defn-form? [form]
+  (and (= (count form) 3)
+       (= 'def (first form))
+       (let [[_ _ x] form]
+         (and (seq? x)
+              (= (first x) 'fn*)))))
+
+(defn expanded-form-type [form {:keys [compiler] :as ctx}]
+  (when (seq? form)
+    (cond
+
+      (expanded-defn-form? form) :defn
+
+      (and (= compiler :cljs)
+           (cljs-multi-arity-defn? form))
+      :defn-cljs-multi-arity
+
+      (expanded-defmethod-form? form ctx)
+      :defmethod)))
+
 (defn- expanded-clojure-core-extend-form? [[symb] ctx]
   (= symb 'clojure.core/extend))
 
@@ -425,6 +465,9 @@
                                  (list etype inst-emap)))))]
    `(clojure.core/extend ~ext-type ~@extensions)))
 
+(defn- instrument-clojure-defmethod-form [[_ mname _ mdisp-val mfn] ctx]
+  (let [inst-mfn (instrument mfn ctx)]
+    `(. ~mname clojure.core/addMethod ~mdisp-val ~inst-mfn)))
 
 (defn- instrument-function-like-form
   "Instrument form representing a function call or special-form."
@@ -457,6 +500,8 @@
                 :else
                 ctx)]
       (cond
+        (expanded-defmethod-form? form ctx)
+        (instrument-clojure-defmethod-form form ctx)
 
         (expanded-clojure-core-extend-form? form ctx)
         (instrument-core-extend-form form ctx)
@@ -601,39 +646,6 @@
         inst-code (instrument-tagged-code tagged-form ctx)]
     inst-code))
 
-(defn expanded-def-form? [form]
-  (and (seq? form)
-       (= (first form) 'def)))
-
-(defn expanded-defmethod-form? [form {:keys [compiler]}]
-  (and (seq? form)
-       (or (and (= compiler :clj)
-            (= (count form) 5)
-            (= (nth form 2) 'clojure.core/addMethod))
-       (and (= compiler :cljs)
-            (= (count form) 4)
-            (= (first form) 'cljs.core/-add-method)))))
-
-(defn expanded-defn-form? [form]
-  (and (= (count form) 3)
-       (= 'def (first form))
-       (let [[_ _ x] form]
-         (and (seq? x)
-              (= (first x) 'fn*)))))
-
-(defn expanded-form-type [form {:keys [compiler] :as ctx}]
-  (when (seq? form)
-    (cond
-
-      (expanded-defn-form? form) :defn
-
-      (and (= compiler :cljs)
-           (cljs-multi-arity-defn? form))
-      :defn-cljs-multi-arity
-
-      (expanded-defmethod-form? form ctx)
-      :defmethod)))
-
 (defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
   (if (or (expanded-def-form? (second inst-form))
           (expanded-defmethod-form? (second inst-form) ctx)
@@ -667,13 +679,6 @@
  (set! (. multi-arity-foo -cljs$lang$maxFixedArity) 2)
 
  nil)
-
-(defn cljs-multi-arity-defn? [[x1 & x2]]
-  (when (= x1 'do)
-    (let [[xdef & xset] (keep first x2)]
-      (and (= xdef 'def)
-           (pos? (count xset))
-           (every? #(= 'set! %) xset)))))
 
 #_(defn instrument-cljs-multi-arity-outer-form [[_ xdef & xsets] orig-form ctx]
   (let [fn-name (second xdef)
