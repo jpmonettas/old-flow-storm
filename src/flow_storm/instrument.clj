@@ -428,19 +428,6 @@
          (and (seq? x)
               (= (first x) 'fn*)))))
 
-(defn expanded-form-type [form {:keys [compiler] :as ctx}]
-  (when (seq? form)
-    (cond
-
-      (expanded-defn-form? form) :defn
-
-      (and (= compiler :cljs)
-           (cljs-multi-arity-defn? form))
-      :defn-cljs-multi-arity
-
-      (expanded-defmethod-form? form ctx)
-      :defmethod)))
-
 (defn- expanded-clojure-core-extend-form? [[symb] ctx]
   (= symb 'clojure.core/extend))
 
@@ -449,6 +436,24 @@
        (= 'do (first form))
        (seq? (second form))
        (= 'clojure.core/extend (-> form second first))))
+
+(defn expanded-form-type [form {:keys [compiler] :as ctx}]
+  (when (seq? form)
+    (cond
+
+      (expanded-defn-form? form) :defn ;; this covers (defn foo [] ...), (def foo (fn [] ...)), and multy arities
+      (expanded-defmethod-form? form ctx) :defmethod
+      (expanded-clojure-core-extend-form? form ctx) :extend-type
+      (expanded-extend-protocol-form? form ctx) :extend-protocol
+
+      ;; (and (= compiler :cljs)
+      ;;      (cljs-multi-arity-defn? form))
+      ;; :defn-cljs-multi-arity
+
+)))
+
+
+
 
 (defn- instrument-core-extend-form [[_ ext-type & exts :as form] ctx]
   (let [extensions (->> (partition 2 exts)
@@ -696,11 +701,11 @@
         inst-code `(do ~xdef ~@inst-sets-forms)]
     inst-code))
 
-#_(defn parse-defn-expansion [defn-expanded-form]
+(defn parse-defn-expansion [defn-expanded-form]
   ;; (def my-fn (fn* ([])))
-  (let [[_ fn-name fn-body] defn-expanded-form]
-    {:fn-name fn-name
-     :fn-body fn-body}))
+  (let [[_ var-name & fn-arities-bodies] defn-expanded-form]
+    {:var-name var-name
+     :fn-arities-bodies fn-arities-bodies}))
 
 #_(defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
   (let [[mname mval mbody] (case compiler

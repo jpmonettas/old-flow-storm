@@ -30,14 +30,16 @@
 
 (def traced-vars-orig-fns (atom {}))
 
-(defn- initial-ctx [form env]
+(defn- initial-ctx [flow-id form-ns form env]
   (let [form-id (hash form)]
     {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
      :on-outer-form-init-fn 'flow-storm.tracer/init-trace
      :compiler         (i/target-from-env env)
+     :flow-id          flow-id
      :form-id          form-id
+     :form-ns          form-ns
      :disable          #{} #_#{:expr :binding}}))
 
 (defn- pprint-on-err [x]
@@ -49,9 +51,8 @@
   ([form] `(trace 0 ~form)) ;; need to do this so multiarity macros work
   ([flow-id form]
    (binding [i/*environment* &env]
-     (let [ctx (-> (initial-ctx form &env)
-                   (assoc :flow-id flow-id
-                          :form-ns (str (ns-name *ns*))))
+     (let [form-ns (str (ns-name *ns*))
+           ctx (initial-ctx flow-id form-ns form &env )
            inst-code (-> form
                          (i/instrument-all ctx)
                          (i/maybe-unwrap-outer-form-instrumentation ctx))]
