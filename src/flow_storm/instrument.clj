@@ -453,6 +453,18 @@
 )))
 
 
+(defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
+  (if (and (seq? inst-form)
+           (= 'flow-storm.tracer/expr-exec-trace (first inst-form)))
+    #_(or (expanded-def-form? (second inst-form))
+          (expanded-defmethod-form? (second inst-form) ctx)
+          (expanded-extend-protocol-form? (second inst-form) ctx))
+
+    ;; discard the on-expr-exec-fn
+    (second inst-form)
+
+    ;; else do nothing
+    inst-form))
 
 
 (defn- instrument-core-extend-form [[_ ext-type & exts :as form] ctx]
@@ -623,8 +635,6 @@
 (defn instrument-tagged-code
   [form ctx]
   (-> form
-      ;; Expand so we don't have to deal with macros.
-      (macroexpand-all ::original-form)
       ;; Go through everything again, and instrument any form with
       ;; debug metadata.
       (instrument ctx)
@@ -648,19 +658,9 @@
 (defn instrument-all [form ctx]
   (let [form-with-meta (with-meta form {::original-form form})
         tagged-form (tag-form-recursively form-with-meta) ;; tag all forms adding ::i/coor
-        inst-code (instrument-tagged-code tagged-form ctx)]
+        macro-expanded-form (macroexpand-all tagged-form ::original-form) ;; Expand so we don't have to deal with macros.
+        inst-code (instrument-tagged-code macro-expanded-form ctx)]
     inst-code))
-
-(defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
-  (if (or (expanded-def-form? (second inst-form))
-          (expanded-defmethod-form? (second inst-form) ctx)
-          (expanded-extend-protocol-form? (second inst-form) ctx))
-
-    ;; discard the on-expr-exec-fn
-    (second inst-form)
-
-    ;; else do nothing
-    inst-form))
 
 ;; ClojureScript multi arity defn expansion is much more involved than
 ;; a clojure one

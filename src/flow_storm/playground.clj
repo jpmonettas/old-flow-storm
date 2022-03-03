@@ -6,7 +6,9 @@
             [clojure.repl :as repl]
             [flow-storm.instrument :as i]
             [clojure.java.io :as io]
-            [flowstorm-tester.main :as tester-main]))
+            [flowstorm-tester.main :as tester-main]
+            [clojure.tools.reader :as reader])
+  (:import [java.io PushbackReader]))
 
 (defn- initial-ctx-clj [flow-id form-ns form env]
   (let [form-id (hash form)]
@@ -19,7 +21,7 @@
      :flow-id          flow-id
      :form-id          form-id
      :form-ns          form-ns
-     :disable          #{} #_#{:expr :binding};; :expr :binding
+     :disable          #_#{} #{:expr :binding};; :expr :binding
      }))
 
 ;;;;;;;;;;;;;;;;;;;
@@ -101,55 +103,101 @@
 ;; By file tracing ;;
 ;;;;;;;;;;;;;;;;;;;;;
 
-(defn all-files-for-ns-prefix
+(defn interesting-files-for-namespaces
   "Try to find as much project files as possible for namespaces that start with `prefix`."
-  [prefix]
+  [ns-set]
   (reduce (fn [r ns]
-           (let [ns-vars (vals (ns-interns ns))]
-             (into r (keep (fn [v]
-                            (when-let [file (:file (meta v))]
-                              [ns (io/resource file)]))
-                          ns-vars))))
-         #{}
-         (all-ns-with-prefix prefix {:excluding #{""}})))
+            (let [ns-vars (vals (ns-interns ns))]
+              (into r (keep (fn [v]
+                              (when-let [file (:file (meta v))]
+                                (io/resource file)))
+                            ns-vars))))
+          #{}
+          ns-set))
 
-(defn uninteresting-form? [form]
+(defn uninteresting-form? [ns form]
   (or (nil? form)
       (when (and (seq? form)
                  (symbol? (first form)))
         (contains? '#{"ns" "defrecord" "defmulti" "deftype"
-                      "defprotocol" "defmacro" "comment"}
-                   (name (first form))))))
+                      "defprotocol" "defmacro" "comment" "import-macros"}
+                   (name (first form))))
+      (let [macro-expanded-form (fsi/macroexpand-all form ::original-form)
+            kind (fsi/expanded-form-type macro-expanded-form {:compiler :clj})]
+        (not (contains? #{:defn :defmethod :extend-type :extend-protocol} kind)))))
 
 (defn trace-form [ns form]
-  (binding [fsi/*environment* {}]
-    (let [ctx (initial-ctx-clj 0 (str (ns-name ns)) form nil)
-          inst-form (-> form
+  (let [ctx (initial-ctx-clj 0 (str (ns-name ns)) form nil)
+        inst-form (try
+                    (-> form
                         (fsi/instrument-all ctx)
-                        (fsi/maybe-unwrap-outer-form-instrumentation ctx))]
-      (binding [*ns* ns]
-        (eval inst-form)))))
+                        (fsi/maybe-unwrap-outer-form-instrumentation ctx))
+                    (catch Exception e
+                      (prn "Error instrumenting form " form)
+                      (.printStackTrace e)
+                      (System/exit 1)))]
 
-(defn trace-file-forms [ns file]
-  (println "Instrumenting file " (ns-name ns) (.getFile file))
-  (let [file-forms (binding [*ns* ns]
-                     (read-string {:read-cond :allow}
-                                  (format "[%s]" (slurp file))))]
-    (println (format "File contains %d forms" (count file-forms)))
+    (try
+      (eval inst-form)
+      (catch Exception e
+        (println "Error evaluating form")
+        #_(prn "Error evaluating form" inst-form)
+        #_(prn "NS" (ns-name ns) "original form " form)
+        #_(.printStackTrace e)
+        #_(System/exit 1)))))
 
-    (doseq [form file-forms]
-      (if (uninteresting-form? form)
-        (print ".")
+(defn read-file-ns-decl
+  "Attempts to read a (ns ...) declaration from file, and returns the
+  unevaluated form. Returns nil if ns declaration cannot be found.
+  read-opts is passed through to tools.reader/read."
+  [file]
+  (let [ns-decl? (fn [form] (and (list? form) (= 'ns (first form))))]
+    (with-open [rdr (PushbackReader. (io/reader file))]
+     (let [opts {:read-cond :allow
+                 :features #{:clj}
+                 :eof ::eof}]
+       (loop []
+         (let [form (reader/read opts rdr)]
+           (cond
+             (ns-decl? form) form
+             (= ::eof form) nil
+             :else (recur))))))))
 
-        (do
-          (trace-form ns form)
-          (print "I"))))
-    (println)))
+(defn trace-file-forms [file]
+  (print "About to instrument file " (.getFile file))
+  (let [[_ ns-from-decl] (read-file-ns-decl file)]
+    (println " NS " ns-from-decl)
+    (if-not ns-from-decl
 
-(defn trace-files-for-ns-prefix [prefix]
-  (let [ns-files-set (all-files-for-ns-prefix prefix)]
-    (doseq [[ns file] ns-files-set]
-      (trace-file-forms ns file))))
+      (println (format "Warning, skipping %s since it doesn't contain a (ns ) decl. We don't support (in-ns ...) yet." (.getFile file)))
+
+      ;; this is IMPORTANT, once we have `ns-from-decl` all the instrumentation work
+      ;; should be done as if we where in `ns-from-decl`
+      (binding [*ns* (find-ns ns-from-decl)
+                fsi/*environment* {}]
+        (when-not (= ns-from-decl 'clojure.core) ;; we don't want to instrument clojure core since it brings too much noise
+         (let [ns (find-ns ns-from-decl)
+               file-forms (read-string {:read-cond :allow}
+                                       (format "[%s]" (slurp file)))]
+           (println (format "NS for file %s File contains %d forms" ns-from-decl (count file-forms)))
+
+           (doseq [form file-forms]
+             (try
+               (if (uninteresting-form? ns form)
+                (print ".")
+
+                (do
+                  (trace-form ns form)
+                  (print "I")))
+               (catch Exception e
+                 (println "Error processing form in " ns-from-decl (.getMessage e)))))
+           (println)))))))
+
+(defn trace-files-for-namespaces [prefix]
+  (let [ns-set (all-ns-with-prefix prefix {:excluding #{""}})
+        files-set (interesting-files-for-namespaces ns-set)]
+    (doseq [file files-set]
+      (trace-file-forms file))))
 
 (comment
 
@@ -172,12 +220,14 @@
   )
 
 ;; Run with : clj -X flow-storm.playground/runner
-#_(defn runner [& args]
+(defn runner [& args]
   (fsa/connect)
 
   (time
-   (trace-all-ns (all-ns-with-prefix "cljs." {:excluding #{""}})
-                 {:skip-vars #{}}))
+   #_(trace-all-ns (all-ns-with-prefix "cljs." {:excluding #{""}})
+                   {:skip-vars #{}})
+   (trace-files-for-namespaces "cljs.")
+   )
 
   (time
    (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
@@ -185,7 +235,7 @@
              flow-storm.tracer/*flow-id* 0]
      (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")))
 
-  (System/exit 0)
+  #_(System/exit 0)
 
   ;; -- No instrumentation --
   ;; "Elapsed time: 14886.711692 msecs" ~ 14 secs
@@ -202,12 +252,12 @@
   ;; "Elapsed time: 252373.632364 msecs" ~ 4.2 min
     )
 
-(defn runner [& args]
+#_(defn runner [& args]
 
   (fsa/connect)
 
   (time
-   (trace-files-for-ns-prefix "flowstorm-tester"))
+   (trace-files-for-namespaces "flowstorm-tester"))
 
   (time
    (binding [flow-storm.tracer/*init-traced-forms* (atom #{})
