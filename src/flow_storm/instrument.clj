@@ -456,9 +456,6 @@
 (defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
   (if (and (seq? inst-form)
            (= 'flow-storm.tracer/expr-exec-trace (first inst-form)))
-    #_(or (expanded-def-form? (second inst-form))
-          (expanded-defmethod-form? (second inst-form) ctx)
-          (expanded-extend-protocol-form? (second inst-form) ctx))
 
     ;; discard the on-expr-exec-fn
     (second inst-form)
@@ -466,20 +463,19 @@
     ;; else do nothing
     inst-form))
 
-
 (defn- instrument-core-extend-form [[_ ext-type & exts :as form] ctx]
   (let [extensions (->> (partition 2 exts)
                         (mapcat (fn [[etype emap]]
-                               (let [inst-emap (reduce-kv
-                                                (fn [r k f]
-                                                  (assoc r k (instrument f
-                                                                         (assoc ctx :defn-def {:fn-name (symbol (name k))
-                                                                                               :orig-form (or
-                                                                                                           (-> ctx :defn-def :orig-form)
-                                                                                                           (::original-form (meta form)))}))))
-                                                {}
-                                                emap)]
-                                 (list etype inst-emap)))))]
+                                  (let [inst-emap (reduce-kv
+                                                   (fn [r k f]
+                                                     (assoc r k (instrument f
+                                                                            (assoc ctx :defn-def {:fn-name nil ;; this will add gensym fn-name
+                                                                                                  :orig-form (or
+                                                                                                              (-> ctx :defn-def :orig-form)
+                                                                                                              (::original-form (meta form)))}))))
+                                                   {}
+                                                   emap)]
+                                    (list etype inst-emap)))))]
    `(clojure.core/extend ~ext-type ~@extensions)))
 
 (defn- instrument-clojure-defmethod-form [[_ mname _ mdisp-val mfn] ctx]

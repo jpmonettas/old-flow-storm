@@ -224,8 +224,6 @@
   (fsa/connect)
 
   (time
-   #_(trace-all-ns (all-ns-with-prefix "cljs." {:excluding #{""}})
-                   {:skip-vars #{}})
    (trace-files-for-namespaces "cljs.")
    )
 

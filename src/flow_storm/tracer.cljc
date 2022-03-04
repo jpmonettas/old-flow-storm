@@ -12,21 +12,28 @@
 (defonce pre-conn-events-holder (atom []))
 (def ^:dynamic *print-length* nil)
 (def ^:dynamic *flow-id* nil)
-;; (def ^:dynamic *stack-count-limit* nil)
 (def ^:dynamic *init-traced-forms* nil)
-;; (def ^:dynamic *stacks-state* nil)
 
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
 
-(defn serialize-val [v]  
-  (try
-    (binding [clojure.core/*print-length* (or *print-length* 50)]
-      (pr-str v))
-    (catch Exception e      
-      (println "Can't serialize this, skipping " (type v))
-      "")))
+(defn serialize-val [v]    
+  (if (or (= (type v) clojure.lang.LazySeq)
+          (= (type v) clojure.lang.Cons))
+
+    ;;@@@ HACK. TODO: figure this out, when trying to pr-str of some values
+    ;; makes the JVM StackOverflowError
+    ;; One example is cljs.analyzer:4334 inside forms-seq* fn
+    "LAZY" 
+
+    (try
+      (binding [clojure.core/*print-length* (or *print-length* 50)
+                clojure.core/*print-level* 3]
+        (pr-str v))
+      (catch Exception e      
+        (println "Can't serialize this, skipping " (type v))
+        ""))))
 
 (defn- hold-event
   "Collect the event in a internal atom (`pre-conn-events-holder`).
@@ -36,44 +43,6 @@
   (println "[Holding]" event)
   (swap! pre-conn-events-holder conj event))
 
-
-#_(defn ws-send
-  "Send the event thru the connected websocket. If the websocket
-  connection is not ready, hold it in `pre-conn-events-holder`"
-  [[ttype m :as t]]
-  (let [tid (:thread-id m)]
-    (cond
-      
-      (= ttype :fn-call-trace)
-      (let [f (str (:fn-ns m) "/" (:fn-name m))]
-        (swap! *stacks-state* (fn [ss]                            
-                              (let [ss' (update-in ss [tid :current-stack] conj f) ;; update the current-stack
-                                    {:keys [blocked current-stack]} (get ss' tid)
-                                    ss'' (update-in ss' [tid :stack-counts] ;; inc the stack count for current-stack
-                                                    (fn [sc]                                           
-                                                      (let [updated-stack-count (inc (get sc current-stack 0))]
-                                                        (assoc sc current-stack updated-stack-count))))]
-                                
-                                (if (and (not blocked) (> (get-in ss'' [tid :stack-counts current-stack]) *stack-count-limit*))
-                                  
-                                  (assoc-in ss'' [tid :blocked] current-stack)
-                                  ss'')))))
-      
-      (and (= ttype :exec-trace) (:outer-form? m))
-      (swap! *stacks-state* (fn [ss]
-                            (let [blocked (get-in ss [tid :blocked])
-                                  current-stack (get-in ss [tid :current-stack])
-                                  ss' (if (and current-stack (= (pop blocked) current-stack)) ;; unblock if we got to unblock stack position
-                                        (assoc-in ss [tid :blocked] nil)
-                                        ss)]
-                              (update-in ss' [tid :current-stack] pop) ;; pop the current stack
-                              ))))    
-    (let [blocked? (and tid
-                        (get-in @*stacks-state* [tid :blocked]))]
-
-      (if blocked?
-        nil
-        ((or @send-fn-a hold-event) t)))))
 
 (defn ws-send
   "Send the event thru the connected websocket. If the websocket
