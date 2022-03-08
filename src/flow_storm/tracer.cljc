@@ -11,6 +11,7 @@
 (defonce send-fn-a (atom nil))
 (defonce pre-conn-events-holder (atom []))
 (def ^:dynamic *print-length* nil)
+(def ^:dynamic *print-level* nil)
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* nil)
 
@@ -29,7 +30,7 @@
 
     (try
       (binding [clojure.core/*print-length* (or *print-length* 50)
-                clojure.core/*print-level* 3]
+                clojure.core/*print-level* (or *print-level* 5)]
         (pr-str v))
       (catch Exception e      
         (println "Can't serialize this, skipping " (type v))
@@ -43,7 +44,6 @@
   (println "[Holding]" event)
   (swap! pre-conn-events-holder conj event))
 
-
 (defn ws-send
   "Send the event thru the connected websocket. If the websocket
   connection is not ready, hold it in `pre-conn-events-holder`"
@@ -55,16 +55,15 @@
 
 (defn init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id flow-id args-vec fn-name ns]} form]
-  (when-not (contains? @*init-traced-forms* [flow-id form-id])
+  [{:keys [form-id args-vec fn-name ns]} form]
+  (when-not (contains? @*init-traced-forms* [*flow-id* form-id])
     (let [trace-data (cond-> {:flow-id *flow-id*
                               :form-id form-id
                               :form form
                               :ns ns
-                              :timestamp (get-timestamp)}
-                       flow-id  (assoc :fixed-flow-id-starter? true))]
+                              :timestamp (get-timestamp)})]
       (ws-send [:init-trace trace-data])
-      (swap! *init-traced-forms* conj [flow-id form-id]))))
+      (swap! *init-traced-forms* conj [*flow-id* form-id]))))
 
 (defn expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
@@ -193,71 +192,6 @@
      (reset! send-fn-a (fn [trace]                         
                          (.put trace-queue trace)))
      stats)))
-
-#_(defn connect
-  "Connects to the flow-storm debugger.
-  When connection is ready, replies any events hold in `pre-conn-events-holder`"
-  ([] (connect nil))
-  ([{:keys [host port protocol tap-name]}]
-
-   ;; don't connect if we already have a connection
-   ;; this is so connect can be called multiple times, usefull in hot reload context
-   ;; when the init function in called again without restarting everything
-   (when-not @send-fn-a
-    (let [{:keys [chsk ch-recv send-fn state]} (sente/make-channel-socket-client! "/ws"
-                                                                                  "dummy-csrf-token" ;; to avoid warning
-                                                                                  {:type :ws
-                                                                                   :packer (sente-transit/->TransitPacker :json {} {})
-                                                                                   :protocol (or protocol :http)
-                                                                                   :host (or host "localhost")
-                                                                                   :port (or port 7722)})
-          batch-timespan 500
-          ev-ch (async/chan 1000000)
-          _ (async/go-loop [batch []
-                            last-send (get-timestamp)]
-
-              (let [timeout-ch (async/timeout batch-timespan)
-                    [v p] (async/alts! [ev-ch timeout-ch]) ;; block until we have a event or a timeout
-                    ts (get-timestamp)]
-
-                (if (and (or (> (- ts last-send) batch-timespan)
-                             (= p timeout-ch))
-                         (seq batch))
-
-                  ;; if we exceeded the batch time span, or we have a timeout
-                  ;; and the batch is not empty
-                  ;; send the batch and start a new one
-                  (do
-                    (send-fn [:flow-storm/batch batch])
-                    (recur [] ts))
-
-                  ;; else, if it wasn't a timeout accumulate the event in the batch
-                  (if (not= p timeout-ch)
-                    (recur (conj batch v) last-send)
-                    (recur batch last-send)))))
-
-          batch-send-fn (fn [e] (async/put! ev-ch e))]
-
-      (init-tap tap-name)
-
-      ;; take one event from ch-recv, since we just connected it should be :chsk/state for open
-      ;; TODO: improve this. It should be a go-loop handling all events from ch-recv.
-      ;; It is assuming that the :chsk/state is the first event, which is error prone
-      (take! ch-recv (fn [{:keys [event]}]
-                       (when (= (first event) :chsk/state)
-                         (let [holded-events @pre-conn-events-holder]
-                           (println "Ws connection ready, re playing " (count holded-events) "events")
-
-                           ;; set the websocket send-fn globally so it can be
-                           ;; used by the tracers
-                           (reset! send-fn-a batch-send-fn)
-
-                           ;; replay all events we have on hold
-                           (doseq [ev holded-events]
-                             (batch-send-fn ev))
-
-                           ;; empty the events holder atom
-                           (reset! pre-conn-events-holder [])))))))))
 
 (comment
 

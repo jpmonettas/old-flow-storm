@@ -16,45 +16,11 @@
 ;; Some utilities ;;
 ;;;;;;;;;;;;;;;;;;;;
 
- ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- ;; ATTENTION!!, some nasty hacks  ;;
- ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Normal `clojure.core/macroexpand-1` works differently when being called from clojure and clojurescript. ;;
-;; See: https://github.com/jpmonettas/clojurescript-macro-issue                                            ;;
-;; One solution is to use clojure.core/macroexpand-1 when we are in a clojure environment                  ;;
-;; and user cljs.analyzer/macroexpand-1 when we are in a clojurescript one.                                ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 ;; This will contain the macroexpansion environment
 ;; the same you can get with the &env in defmacro
 (def ^:dynamic *environment*)
 
 (declare instrument-outer-forms)
-
-(defn target-from-env
-  "Given a env map return :cljs or :clj"
-  [env]
-  (if (contains? env :js-globals)
-    :cljs
-    :clj))
-
-(defn normalized-macroexpand-1
-  "A version of macroexpand-1 that works for clojure and clojurescript
-  given it can tell from *environment* if we are in clojure or clojurescript"
-  [form]
-  ((case (target-from-env *environment*)
-     :cljs (partial ana/macroexpand-1 *environment*)
-     :clj  macroexpand) form))
-
-(defn normalized-macroexpand
-  "A macroexpand version that uses normalized-macroexpand-1 instead of clojure.core/macroexpand-1"
-  [form]
-  (let [ex (if (seq? form)
-             (normalized-macroexpand-1 form)
-             form)]
-    (if (identical? ex form)
-      form
-      (normalized-macroexpand ex))))
 
 (defn merge-meta
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
@@ -80,18 +46,28 @@
        (with-meta form nil))
      form)))
 
+(defn macroexpand+
+  "A macroexpand version that support custom `macroexpand-1-fn`"
+  [macroexpand-1-fn form]
+  (let [ex (if (seq? form)
+             (macroexpand-1-fn form)
+             form)]
+    (if (identical? ex form)
+      form
+      (macroexpand+ macroexpand-1-fn ex))))
+
 (defn macroexpand-all
   "Like `clojure.walk/macroexpand-all`, but preserves and macroexpands
   metadata. Also store the original form (unexpanded and stripped of
   metadata) in the metadata of the expanded form under original-key."
-  [form & [original-key]]
+  [macroexpand-1-fn form & [original-key]]
   (let [md (meta form)
-        expanded (walk/walk #(macroexpand-all % original-key)
+        expanded (walk/walk #(macroexpand-all macroexpand-1-fn % original-key)
                             identity
                             (if (seq? form)
                               ;; Without this, `macroexpand-all`
                               ;; throws if called on `defrecords`.
-                              (try (let [r (normalized-macroexpand form)]
+                              (try (let [r (macroexpand+ macroexpand-1-fn form)]
                                      r)
                                    (catch ClassNotFoundException e form))
                               form))]
@@ -100,7 +76,7 @@
       ;; contains, for example, functions. This is the case for
       ;; deftest forms.
       (merge-meta expanded
-        (macroexpand-all md)
+        (macroexpand-all macroexpand-1-fn md)
         (when original-key
           ;; We have to quote this, or it will get evaluated by
           ;; Clojure (even though it's inside meta).
@@ -202,7 +178,7 @@
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
-  [[name & args :as form] {:keys [flow-id form-id form-ns on-outer-form-init-fn on-fn-call-fn] :as ctx}]
+  [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn] :as ctx}]
   (cons name
         ;; We're dealing with some low level stuff here, and some of
         ;; these internal forms are completely undocumented, so let's
@@ -268,8 +244,7 @@
                                                               (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
                                                                     outer-preamble (cond-> []
                                                                                      defn-def (into [`(~on-outer-form-init-fn {:form-id ~form-id
-                                                                                                                    :flow-id ~flow-id
-                                                                                                                    :ns ~form-ns}
+                                                                                                                               :ns ~form-ns}
                                                                                                        ~(pr-str (second orig-form)))])
                                                                                      true     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(remove-&-symb arity-args-vec))])
                                                                                      true     (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
@@ -333,22 +308,16 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
-(defn- instrument-form [form coor {:keys [on-expr-exec-fn form-id outer-form? compiler flow-id disable] :as ctx}]
+(defn- instrument-form [form coor {:keys [on-expr-exec-fn form-id outer-form? compiler disable] :as ctx}]
   ;; only disable :fn-call traces if it is not the outer form, we still want to
   ;; trace it since its the function return trace
   (if (and (disable :expr) (not outer-form?))
 
     form
 
-    (let [trace-data (cond-> {:coor coor, :form-id form-id :flow-id flow-id}
+    (let [trace-data (cond-> {:coor coor, :form-id form-id}
                        outer-form? (assoc :outer-form? outer-form?))]
       `(~on-expr-exec-fn ~form nil ~trace-data))))
-
-;; (defn- instrument-form [form orig coor {:keys [on-expr-exec-fn form-flow-id form-id outer-form?]}]
-;;   `(~on-expr-exec-fn ~form nil
-;;     ~(cond-> {:coor coor, :form-id form-id :form-flow-id form-flow-id}
-;;        outer-form? (assoc :outer-form? outer-form?))
-;;     (quote ~orig)))
 
 (defn- maybe-instrument
   "If the form has been tagged with ::coor on its meta, then instrument it
@@ -594,19 +563,6 @@
   ;; Don't use `postwalk` because it destroys previous metadata.
   (walk-indexed tag-form form))
 
-(defn print-form
-  "Pretty print form.
-  If expand? is true, macroexpand the form. If meta? is true, also print
-  meta. This function is intended for inspection of instrumented code."
-  [form & [expand? meta?]]
-  (binding [*print-meta* meta?]
-    (let [form (if expand?
-                 (macroexpand-all form)
-                 form)]
-      (clojure.pprint/pprint form)))
-  (flush)
-  form)
-
 (defn- strip-instrumentation-meta
   "Remove all tags in order to reduce java bytecode size and enjoy cleaner code
   printouts."
@@ -638,23 +594,28 @@
 
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form."
-  [{:keys [orig-form args-vec fn-name form-ns form-id flow-id on-outer-form-init-fn on-fn-call-fn] :as ctx} forms preamble]
+  [{:keys [orig-form args-vec fn-name form-ns form-id on-outer-form-init-fn on-fn-call-fn] :as ctx} forms preamble]
   `(do
      ~@preamble
 
      ~(instrument-form (conj forms 'do) [] (assoc ctx :outer-form? true))))
 
-;; TODO: can this be mixed with normal fn* body instrumentation?
-;; (defn instrument-function-bodies [[_ & arities :as form] ctx wrapper]
-;;   `(fn*
-;;     ~@(->> arities
-;;            (map (fn [[args-vec & body]]
-;;                   (list args-vec (wrapper (assoc ctx :args-vec args-vec) body)))))))
+;;;;;;;;;;;;;;;;
+;; @@@ Hacky  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Normal `clojure.core/macroexpand-1` works differently when being called from clojure and clojurescript. ;;
+;; See: https://github.com/jpmonettas/clojurescript-macro-issue                                            ;;
+;; One solution is to use clojure.core/macroexpand-1 when we are in a clojure environment                  ;;
+;; and user cljs.analyzer/macroexpand-1 when we are in a clojurescript one.                                ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn instrument-all [form ctx]
-  (let [form-with-meta (with-meta form {::original-form form})
+(defn instrument-all [form {:keys [compiler environment] :as ctx}]
+  (let [macroexpand-1-fn (case compiler
+                           :cljs (partial ana/macroexpand-1 environment)
+                           :clj  macroexpand-1)
+        form-with-meta (with-meta form {::original-form form})
         tagged-form (tag-form-recursively form-with-meta) ;; tag all forms adding ::i/coor
-        macro-expanded-form (macroexpand-all tagged-form ::original-form) ;; Expand so we don't have to deal with macros.
+        macro-expanded-form (macroexpand-all macroexpand-1-fn tagged-form ::original-form) ;; Expand so we don't have to deal with macros.
         inst-code (instrument-tagged-code macro-expanded-form ctx)]
     inst-code))
 
@@ -702,71 +663,6 @@
   (let [[_ var-name & fn-arities-bodies] defn-expanded-form]
     {:var-name var-name
      :fn-arities-bodies fn-arities-bodies}))
-
-#_(defn parse-defmethod-expansion [defmethod-expanded-form {:keys [compiler]}]
-  (let [[mname mval mbody] (case compiler
-
-                             ;; (. my-method clojure.core/addMethod :bla (fn* [...] ...))
-                             :clj (let [[_ mname _ mval mbody] defmethod-expanded-form]
-                                    [mname mval mbody])
-
-                             ;; (cljs.core/-add-method my-method :bla (fn* [...] ...))
-                             :cljs (let [[_ mname mval mbody] defmethod-expanded-form]
-                                     [mname mval mbody]))]
-    {:method-name mname
-     :method-val mval
-     :method-body mbody}))
-
-#_(defn fix-outer-form-instrumentation [form orig-form {:keys [compiler disable] :as ctx}]
-  (let [outer-form (if (disable :expr) form (unwrap-instrumentation form))
-        instrument-bodies (fn [fn-name fn-body]
-                            (instrument-function-bodies
-                             fn-body
-                             (assoc ctx
-                                    :orig-form orig-form
-                                    :fn-name (str fn-name))
-                             instrument-outer-forms))]
-    (case (outer-form-type outer-form ctx)
-      :defn (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)]
-              ;; instrument all fn bodies (multy arities) with our outer form tracing
-              `(def ~fn-name ~(instrument-bodies fn-name fn-body)))
-
-      :defn-cljs-multi-arity (instrument-cljs-multi-arity-outer-form outer-form orig-form ctx)
-
-      :defmethod (let [{:keys [method-name method-val method-body]} (parse-defmethod-expansion outer-form ctx)]
-                   (case compiler
-                     :clj `(. ~method-name clojure.core/addMethod ~method-val ~(instrument-bodies method-name method-body))
-                     :cljs `(cljs.core/-add-method ~method-name  ~method-val ~(instrument-bodies method-name method-body))))
-
-      ;; if we are here means it is not a fn defining form
-      (instrument-outer-forms (assoc ctx :orig-form orig-form) (list form)))))
-
-#_(defn redefine-vars [inst-form var-symb orig-form {:keys [compiler] :as ctx}]
-  (let [outer-form (unwrap-instrumentation inst-form)]
-    (if (= (outer-form-type outer-form ctx) :defn)
-
-      (let [{:keys [fn-body fn-name]} (parse-defn-expansion outer-form)
-            fn-body (instrument-function-bodies
-                     fn-body
-                     (assoc ctx
-                            :form-ns (namespace var-symb)
-                            :orig-form orig-form
-                            :fn-name (name fn-name))
-                     instrument-outer-forms)
-            var-ns (when-let [var-ns (namespace var-symb)] (symbol var-ns))
-            var-name (symbol (name var-symb))]
-        (case compiler
-          :clj  `(binding [*ns* (find-ns '~var-ns)]
-                   (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
-                   (intern '~var-ns '~var-name (eval '~fn-body)))
-          :cljs `(do
-                   (swap! flow-storm.api/traced-vars-orig-fns assoc (quote ~var-symb) ~var-symb)
-                   (set! ~var-symb ~fn-body))))
-
-      (do
-        (println "Flow-storm only support fn tracing now. Multimethods and other kind of fn definitions will be implemented in the future.")
-        (println "Outer-form:" )
-        (prn outer-form)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For working at the repl ;;
