@@ -176,6 +176,17 @@
 (defn remove-&-symb [args]
   (into [] (keep #(when-not (= % '&) %) args)))
 
+(defn remove-type-hint-tags [args]
+  (mapv (fn [a]
+          (if (contains? (meta a) :tag)
+            (vary-meta a dissoc :tag)
+            a))
+        args))
+
+(defn clear-fn-args-vec [args]
+  (-> args
+      remove-&-symb
+      remove-type-hint-tags))
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
   [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
@@ -250,7 +261,7 @@
                                                                                      defn-def (into [`(~on-outer-form-init-fn {:form-id ~form-id
                                                                                                                                :ns ~form-ns}
                                                                                                        ~(pr-str (second orig-form)))])
-                                                                                     true     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(remove-&-symb arity-args-vec))])
+                                                                                     true     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
                                                                                      true     (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
 
                                                                     ctx' (-> ctx
@@ -598,7 +609,7 @@
 
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form."
-  [{:keys [orig-form args-vec fn-name form-ns form-id on-outer-form-init-fn on-fn-call-fn] :as ctx} forms preamble]
+  [{:keys [orig-form args-vec fn-name form-ns form-id on-fn-call-fn] :as ctx} forms preamble]
   `(do
      ~@preamble
 
