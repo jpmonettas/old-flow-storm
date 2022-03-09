@@ -120,7 +120,8 @@
 
 ;; Run with : clj -X flow-storm.file-api/cljs-test
 (defn cljs-test [& args]
-  (fsa/connect)
+
+  (fsa/connect {:to-file "./cljs-flow-output"})
 
   (time
    (trace-files-for-namespaces "cljs." {:disable #{:expr :binding}})
