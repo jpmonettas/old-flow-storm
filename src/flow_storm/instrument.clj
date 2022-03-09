@@ -178,7 +178,7 @@
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
-  [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn] :as ctx}]
+  [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
   (cons name
         ;; We're dealing with some low level stuff here, and some of
         ;; these internal forms are completely undocumented, so let's
@@ -225,8 +225,12 @@
                                                                 ;; like [a (+ 1 2)] will became
                                                                 ;; [a (+ 1 2)
                                                                 ;;  _ (bound-trace a ...)]
-                                                                [symb (instrument x ctx)
-                                                                 '_ (bind-tracer symb (-> form meta ::coor) ctx)]))))
+                                                                (cond-> [symb (instrument x ctx)]
+                                                                  ;; doesn't make sense to trace the bind if its a letfn* since
+                                                                  ;; they are just fns
+                                                                  (and (not (disable :binding))
+                                                                       (not= 'letfn* name))
+                                                                  (into ['_ (bind-tracer symb (-> form meta ::coor) ctx)]))))))
                                                   vec)
                                              (instrument-coll (rest args) ctx))
                  '#{reify* deftype*} (map #(if (seq? %)
