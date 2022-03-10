@@ -21,22 +21,14 @@
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
 
-(defn serialize-val [v]    
-  (if (or (= (type v) clojure.lang.LazySeq)
-          (= (type v) clojure.lang.Cons))
-
-    ;;@@@ HACK. TODO: figure this out, when trying to pr-str of some values
-    ;; makes the JVM StackOverflowError
-    ;; One example is cljs.analyzer:4334 inside forms-seq* fn
-    "LAZY" 
-
-    (try
-      (binding [clojure.core/*print-length* (or *print-length* 50)
-                clojure.core/*print-level* (or *print-level* 5)]
-        (pr-str v))
-      (catch Exception e      
-        (println "Can't serialize this, skipping " (type v))
-        ""))))
+(defn serialize-val [v]
+  (try
+    (binding [clojure.core/*print-length* (or *print-length* 50)
+              clojure.core/*print-level* (or *print-level* 5)]
+      (pr-str v))
+    (catch Exception e      
+      (println "Warning: can't serialize this, skipping " (type v))
+      "ERROR_SERIALIZING")))
 
 (defn traceit
   "Send the event thru the connected websocket."

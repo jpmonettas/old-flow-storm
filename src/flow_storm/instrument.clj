@@ -187,6 +187,13 @@
   (-> args
       remove-&-symb
       remove-type-hint-tags))
+
+(defn lazy-seq-form? [form]
+  (and (seq? form)
+       (let [[a b] form]
+         (and (= a 'new)
+              (= b 'clojure.lang.LazySeq)))))
+
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
   [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
@@ -257,19 +264,39 @@
                                ;; then remove it from ctx so fn* declared down the road don't think they are defn
                                instrument-fn-arities-bodies (fn [fn-name [arity-args-vec & arity-body-forms :as arity]]
                                                               (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
+
                                                                     outer-preamble (cond-> []
-                                                                                     defn-def (into [`(~on-outer-form-init-fn {:form-id ~form-id
-                                                                                                                               :ns ~form-ns}
-                                                                                                       ~(pr-str (second orig-form)))])
-                                                                                     true     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
+
+                                                                                     ;; if it is a top level fn* add a trace to register the form
+                                                                                     defn-def
+                                                                                     (into [`(~on-outer-form-init-fn {:form-id ~form-id
+                                                                                                                      :ns ~form-ns}
+                                                                                              ~(pr-str (second orig-form)))])
+
+                                                                                     true
+                                                                                     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
+
+                                                                                     ;; always trace argument bindings
                                                                                      true     (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
 
                                                                     ctx' (-> ctx
                                                                              (assoc :orig-form orig-form)
                                                                              (dissoc :defn-def))
-                                                                    inst-arity-body (instrument-outer-forms ctx'
-                                                                                                            (instrument-coll arity-body-forms ctx')
-                                                                                                            outer-preamble)]
+
+                                                                    lazy-seq-fn? (lazy-seq-form? (first arity-body-forms))
+
+                                                                    inst-arity-body (if lazy-seq-fn?
+                                                                                      ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
+                                                                                      ;; recursion and we risk getting a StackOverflow.
+                                                                                      ;; If we can't wrap the output we can't wrap the call neither since
+                                                                                      ;; they are sinchronized, so we skip this fn* body tracing
+                                                                                      (do
+                                                                                        (println (format "Warning skipping fn* body instrumentation on (%s) because it returns a lazy-seq" form-ns))
+                                                                                        (first arity-body-forms))
+
+                                                                                      (instrument-outer-forms ctx'
+                                                                                                              (instrument-coll arity-body-forms ctx')
+                                                                                                              outer-preamble))]
                                                                 (-> `(~arity-args-vec ~inst-arity-body)
                                                                     (merge-meta (meta arity)))))
                                [fn-name arities-bodies-seq] (cond

@@ -30,6 +30,7 @@
 
 (defn build-form-instrumentation-ctx [{:keys [disable]} form-ns form env]
   (let [form-id (hash form)]
+    (assert (set? disable) ":disable configuration should be a set")
     {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
      :on-bind-fn       'flow-storm.tracer/bound-trace
      :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
