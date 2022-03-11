@@ -1,4 +1,4 @@
-(ns flow-storm.instrument
+(ns flow-storm.instrument.forms
   "This namespace started as a fork of cider.instrument but
   departed a lot from it to make it work for clojurescript and
   to make it able to trace more stuff.
@@ -6,7 +6,6 @@
   Provides utilities to recursively instrument forms for all our traces."
 
   (:require
-   clojure.pprint
    [clojure.walk :as walk]
    [cljs.analyzer :as ana]
    [clojure.string :as str]))
@@ -661,6 +660,21 @@
         inst-code (instrument-tagged-code macro-expanded-form ctx)]
     inst-code))
 
+(defn build-form-instrumentation-ctx [{:keys [disable]} form-ns form env]
+  (let [form-id (hash form)]
+    (assert (set? disable) ":disable configuration should be a set")
+    {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
+     :on-bind-fn       'flow-storm.tracer/bound-trace
+     :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
+     :on-outer-form-init-fn 'flow-storm.tracer/init-trace
+     :environment      env
+     :compiler         (if (contains? env :js-globals)
+                         :cljs
+                         :clj)
+     :form-id          form-id
+     :form-ns          form-ns
+     :disable          (or disable #{}) ;; :expr :binding
+     }))
 ;; ClojureScript multi arity defn expansion is much more involved than
 ;; a clojure one
 #_(do
