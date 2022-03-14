@@ -1,10 +1,12 @@
 (ns flow-storm.debugger.ui.main
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
-            [flow-storm.debugger.ui.styles :as styles])
+            [flow-storm.debugger.ui.styles :as styles]
+            [flow-storm.debugger.ui.flows :as ui-flows])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
-           [javafx.scene.control Alert Alert$AlertType Button ButtonType ComboBox ContextMenu Dialog Label MenuItem TableColumn TableView TextArea TextField]))
+           [javafx.scene.control Alert Alert$AlertType Button ButtonType ComboBox ContextMenu Dialog Label MenuItem TabPane TabPane$TabClosingPolicy Tab TableColumn TableView TextArea TextField]
+           [javafx.geometry Side]))
 
 (javafx.embed.swing.JFXPanel.)
 
@@ -39,16 +41,36 @@
                   trace-cnt-label]))
     box))
 
+(defn main-tabs-pane []
+  (let [tabs-p (TabPane.)
+        tabs (.getTabs tabs-p)
+        flows-tab (doto (Tab. "Flows")
+                    (.setContent (ui-flows/main-pane)))
+        refs-tab (doto (Tab. "Refs")
+                   (.setContent (Label. "Refs comming soon")))
+        taps-tab (doto (Tab. "Taps")
+                   (.setContent (Label. "Taps comming soon")))
+        timeline-tab (doto (Tab. "Timeline")
+                       (.setContent (Label. "Timeline comming soon")))]
+    (doto tabs-p
+      (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE)
+
+      (.setRotateGraphic true)
+      (.setSide (Side/LEFT)))
+
+    (.addAll tabs [flows-tab refs-tab taps-tab timeline-tab])
+
+    tabs-p))
+
 (defn build-main-pane []
   (let [mp (doto (BorderPane.)
                     #_(.setStyle styles/backpane)
                     (.setTop (doto (Button. "Click me")
                                (.setOnAction (event-handler [ev] (println "Clicked")))))
-                    (.setCenter (doto (Pane.)
-                                  (.setStyle "-fx-background-color: red;")))
+                    (.setCenter (main-tabs-pane))
                     (.setBottom (trace-counter-box)))]
 
-    #_(.setOnContextMenuRequested mp
+    (.setOnContextMenuRequested mp
                                 (event-handler
                                  [ev]
                                  (.show ctx-menu
@@ -73,22 +95,26 @@
                                                                               (System/exit 0))}])))
 
   (ui-utils/run-now
+   (try
+     (let [scene (Scene. (build-main-pane) 800 600)]
+       (doto scene
+         (.setOnKeyPressed (event-handler
+                            [ke]
+                            (let [key (.getName (.getCode ke))]
+                              (println "Key pressed" key)))))
 
-   (let [scene (Scene. (build-main-pane) 800 600)]
-     (doto scene
-       (.setOnKeyPressed (event-handler
-                          [ke]
-                          (let [key (.getName (.getCode ke))]
-                            (println "Key pressed" key)))))
+       (alter-var-root #'scene (constantly scene))
+       (alter-var-root #'stage (constantly (doto (Stage.)
+                                             (.setTitle "Flowstorm debugger")
+                                             (.setScene scene)))))
 
-     (alter-var-root #'scene (constantly scene))
-     (alter-var-root #'stage (constantly (doto (Stage.)
-                                           (.setTitle "Flowstorm debugger")
-                                           (.setScene scene)))))
+     (reset-scene-main-pane)
 
-   (reset-scene-main-pane)
+     (-> stage .show)
 
-   (-> stage .show)))
+     (catch Exception e
+       (println "UI Thread exception")
+       (.printStackTrace e)))))
 
 (defn -main
   ""
@@ -96,7 +122,12 @@
 
   )
 
-(defn refresh-ui [] (ui-utils/run-now (reset-scene-main-pane)))
+(defn refresh-ui []
+  (ui-utils/run-now
+   (try (reset-scene-main-pane)
+        (catch Exception e
+          (println "UI Thread exception")
+          (.printStackTrace e)))))
 
 (comment
 

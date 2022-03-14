@@ -1,4 +1,5 @@
-(ns flow-storm.debugger.state)
+(ns flow-storm.debugger.state
+  (:require [clojure.spec.alpha :as s]))
 
 (def *state (atom nil))
 

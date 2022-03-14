@@ -465,7 +465,7 @@
 
 (defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
   (if (and (seq? inst-form)
-           (= 'flow-storm.tracer/expr-exec-trace (first inst-form)))
+           (= 'flow-storm.tracer/trace-expr-exec-trace (first inst-form)))
 
     ;; discard the on-expr-exec-fn
     (second inst-form)
@@ -663,10 +663,10 @@
 (defn build-form-instrumentation-ctx [{:keys [disable]} form-ns form env]
   (let [form-id (hash form)]
     (assert (set? disable) ":disable configuration should be a set")
-    {:on-expr-exec-fn  'flow-storm.tracer/expr-exec-trace
-     :on-bind-fn       'flow-storm.tracer/bound-trace
-     :on-fn-call-fn    'flow-storm.tracer/fn-call-trace
-     :on-outer-form-init-fn 'flow-storm.tracer/init-trace
+    {:on-expr-exec-fn       'flow-storm.tracer/trace-expr-exec-trace
+     :on-bind-fn            'flow-storm.tracer/trace-bound-trace
+     :on-fn-call-fn         'flow-storm.tracer/trace-fn-call-trace
+     :on-outer-form-init-fn 'flow-storm.tracer/trace-init-trace
      :environment      env
      :compiler         (if (contains? env :js-globals)
                          :cljs

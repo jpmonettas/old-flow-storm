@@ -4,19 +4,28 @@
   (:require [flow-storm.instrument.forms :as inst-forms]
             [flow-storm.instrument.namespaces :as inst-ns]
             [flow-storm.tracer :as tracer]
+            [flow-storm.debugger.trace-processor :as trace-processor]
             [flow-storm.debugger.main :as dbg-main]
             [clojure.pprint :as pp]
             [cljs.main :as cljs-main]
             [clojure.repl :as clj.repl]
             [cljs.repl :as cljs.repl]))
 
-(def ws-connect tracer/ws-connect)
-(def file-connect tracer/file-connect)
 (def start-debugger dbg-main/start-debugger)
 
 (defn local-connect []
   (start-debugger)
-  (tracer/local-connect))
+  (tracer/connect {:send-fn (fn [trace]
+                              (trace-processor/dispatch-trace trace))}))
+
+(defn ws-connect [opts]
+  (let [{:keys [send-fn]} (tracer/build-ws-sender opts)]
+    (tracer/connect {:send-fn send-fn})))
+
+(defn file-connect [opts]
+  (let [{:keys [send-fn]} (tracer/build-file-sender opts)]
+    (tracer/connect {:send-fn send-fn})))
+
 
 #_(def trace-ref
   "Adds a watch to ref with ref-name that traces its value changes.
@@ -94,10 +103,14 @@
 (defmacro run-with-execution-ctx
   [{:keys [print-length print-level]} form]
   `(binding [tracer/*init-traced-forms* (atom #{})
-             tracer/*print-length* ~(or print-length 1000)
-             tracer/*print-level*  ~(or print-level 10)
              tracer/*flow-id* 0]
      ~form))
+
+(Thread/setDefaultUncaughtExceptionHandler
+   (reify
+     Thread$UncaughtExceptionHandler
+     (uncaughtException [this thread throwable]
+       (println "Unhandled exception " thread throwable))))
 
 (comment
 
@@ -131,8 +144,6 @@
 
   (time
    (run-with-execution-ctx
-    {:flow-id 0
-     :print-length 2
-     :print-level 1}
+    {:flow-id 0}
     (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")))
     )

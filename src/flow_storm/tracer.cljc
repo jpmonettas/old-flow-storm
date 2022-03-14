@@ -3,27 +3,30 @@
             [editscript.edit :as edit.edit]
             [cognitect.transit :as transit]
             [jsonista.core :as json]
-            [flow-storm.binary-serializer :as bin-serializer]
-            ;; TODO: lazy load this, since it is only for the clojure local case
-            [flow-storm.debugger.trace-processor :as trace-processor])
+            [flow-storm.binary-serializer :as bin-serializer])
   (:import [java.net URI]
            [org.java_websocket.client WebSocketClient]
            [org.java_websocket.handshake ServerHandshake]
            [java.util.concurrent ArrayBlockingQueue]
            [java.io FileOutputStream ByteArrayOutputStream DataOutputStream]))
 
-(defonce *trace-fn (atom nil))
+(defonce trace-queue (ArrayBlockingQueue. 20000000))
 
-(def ^:dynamic *print-length* nil)
-(def ^:dynamic *print-level* nil)
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* nil)
+
+(defrecord InitTrace [flow-id form-id form ns timestamp])
+(defrecord ExecTrace [flow-id form-id coor thread-id result outer-form?])
+(defrecord FnCallTrace [flow-id form-id fn-name fn-ns thread-id args-vec timestamp])
+(defrecord BindTrace [flow-id form-id coor thread-id timestamp symbol value])
 
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
 
-(defn serialize-val [v]
+#_(def ^:dynamic *print-length* nil)
+#_(def ^:dynamic *print-level* nil)
+#_(defn serialize-val [v]
   (try
     (binding [clojure.core/*print-length* (or *print-length* 50)
               clojure.core/*print-level* (or *print-level* 5)]
@@ -32,61 +35,52 @@
       (println "Warning: can't serialize this, skipping " (type v))
       "ERROR_SERIALIZING")))
 
-(defn traceit
-  "Send the event thru the connected websocket."
-  [[ttype m :as t]]
-  (try
-    (@*trace-fn t)
-    (catch Exception e
-      (println "WARN Couldn't trace" t))))
-
-(defn init-trace
+(defn trace-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
   [{:keys [form-id args-vec fn-name ns]} form]
   (when-not (contains? @*init-traced-forms* [*flow-id* form-id])
-    (let [trace-data (cond-> {:flow-id *flow-id*
-                              :form-id form-id
-                              :form form
-                              :ns ns
-                              :timestamp (get-timestamp)})]
-      (traceit [:init-trace trace-data])
+    (let [trace (map->InitTrace {:flow-id *flow-id*
+                                 :form-id form-id
+                                 :form form
+                                 :ns ns
+                                 :timestamp (get-timestamp)})]      
+      (.put trace-queue trace)
       (swap! *init-traced-forms* conj [*flow-id* form-id]))))
 
-(defn expr-exec-trace
+(defn trace-expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
   [result err {:keys [coor outer-form? form-id]}]
-  (let [trace-data (cond-> {:flow-id *flow-id*
-                            :form-id form-id
-                            :coor coor
-                            :thread-id (.getId (Thread/currentThread))
-                            :timestamp (get-timestamp)
-                            :result (serialize-val result)}                     
-                     outer-form? (assoc :outer-form? true))]
-
-    (traceit [:exec-trace trace-data])
-
+  (let [trace (map->ExecTrace {:flow-id *flow-id*
+                               :form-id form-id
+                               :coor coor
+                               :thread-id (.getId (Thread/currentThread))
+                               :timestamp (get-timestamp)
+                               :result result
+                               :outer-form? outer-form?})]
+    (.put trace-queue trace)
     result))
 
-(defn fn-call-trace [form-id ns fn-name args-vec]  
-  (traceit [:fn-call-trace {:flow-id *flow-id*
-                          :form-id form-id
-                          :fn-name fn-name
-                          :fn-ns ns
-                          :thread-id (.getId (Thread/currentThread))
-                          :args-vec (serialize-val args-vec)
-                          :timestamp (get-timestamp)}]))
+(defn trace-fn-call-trace [form-id ns fn-name args-vec]
+  (let [trace (map->FnCallTrace {:flow-id *flow-id*
+                                 :form-id form-id
+                                 :fn-name fn-name
+                                 :fn-ns ns
+                                 :thread-id (.getId (Thread/currentThread))
+                                 :args-vec args-vec
+                                 :timestamp (get-timestamp)})]
+    (.put trace-queue trace)))
 
-(defn bound-trace
+(defn trace-bound-trace
   "Instrumentation function. Sends the `:bind-trace` trace"
   [symb val {:keys [coor form-id]}]
-  (let [trace-data {:flow-id *flow-id*
-                    :form-id form-id
-                    :coor (or coor [])
-                    :thread-id (.getId (Thread/currentThread))
-                    :timestamp (get-timestamp)
-                    :symbol (name symb)
-                    :value (serialize-val val)}]
-    (traceit [:bind-trace trace-data])))
+  (let [trace (map->BindTrace {:flow-id *flow-id*
+                               :form-id form-id
+                               :coor (or coor [])
+                               :thread-id (.getId (Thread/currentThread))
+                               :timestamp (get-timestamp)
+                               :symbol (name symb)
+                               :value val})]
+    (.put trace-queue trace)))
 
 ;; (defn ref-init-trace
 ;;   "Sends the `:ref-init-trace` trace"
@@ -143,7 +137,7 @@
 ;;     (add-tap-fn (fn [v]
 ;;                   (trace-tap tap-id tap-name v))))))
 
-(defn- build-ws-sender [{:keys [host port]}]
+(defn build-ws-sender [{:keys [host port]}]
   (let [wsc (proxy
                 [WebSocketClient]
                 [(URI. "ws://localhost:7722/ws")]
@@ -163,7 +157,7 @@
                   (.send wsc trace-json-str)))
      :ws-client wsc}))
 
-(defn- build-file-sender [{:keys [file-path]}]
+(defn build-file-sender [{:keys [file-path]}]
   (let [file-dos (DataOutputStream. (FileOutputStream. file-path))
         ;; _bos (ByteArrayOutputStream.)
         ;; file-dos (when to-file (DataOutputStream. bos))
@@ -173,13 +167,12 @@
      :file-output-stream file-dos}))
 
 
-(defn- connect
+(defn connect
   "Connects to the flow-storm debugger.
   When connection is ready, replies any events hold in `pre-conn-events-holder`"
   ([] (connect nil))
   ([{:keys [tap-name send-fn]}]
-   (let [trace-queue (ArrayBlockingQueue. 20000000)
-         *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
+   (let [*consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
          send-thread (Thread.
                       (fn []                        
                         (while true                         
@@ -204,21 +197,7 @@
                             
                             (send-fn trace)))))]
      
-     (reset! *trace-fn (fn [trace]
-                         (.put trace-queue trace)))
-     
      (.start send-thread)
      
      nil)))
 
-(defn ws-connect [opts]
-  (let [{:keys [send-fn]} (build-ws-sender opts)]
-    (connect {:send-fn send-fn})))
-
-(defn file-connect [opts]
-  (let [{:keys [send-fn]} (build-file-sender opts)]
-    (connect {:send-fn send-fn})))
-
-(defn local-connect []
-  (connect {:send-fn (fn [trace]
-                       (trace-processor/dispatch-trace trace))}))
