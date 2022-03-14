@@ -4,19 +4,21 @@
   (:require [flow-storm.instrument.forms :as inst-forms]
             [flow-storm.instrument.namespaces :as inst-ns]
             [flow-storm.tracer :as tracer]
+            [flow-storm.debugger.main :as dbg-main]
             [clojure.pprint :as pp]
             [cljs.main :as cljs-main]
             [clojure.repl :as clj.repl]
             [cljs.repl :as cljs.repl]))
 
-(def connect
-  "Connects to flow-storm debugger.
-  Once connected, all generated traces are sent to the debugger thru
-  a websocket connection.
-  Optionally you can provide a map with :host and :port keys."
-  tracer/connect)
+(def ws-connect tracer/ws-connect)
+(def file-connect tracer/file-connect)
+(def start-debugger dbg-main/start-debugger)
 
-(def trace-ref
+(defn local-connect []
+  (start-debugger)
+  (tracer/local-connect))
+
+#_(def trace-ref
   "Adds a watch to ref with ref-name that traces its value changes.
   The first argument is the ref to watch for.
   The second argument is a options map. Available options are :
@@ -26,7 +28,7 @@
   :ignore-keys only works for maps and does NOT ignore nested maps keys."
   tracer/trace-ref)
 
-(def untrace-ref
+#_(def untrace-ref
   "Removes the watch added by trace-ref."
   tracer/untrace-ref)
 
@@ -99,7 +101,7 @@
 
 (comment
 
-  (connect)
+  (local-connect)
 
   (trace {:flow-id 0 :disable #{}}
    (defn factorial [n]
@@ -121,7 +123,7 @@
 ;; Run with : clj -X flow-storm.api/cljs-test
 (defn cljs-test [& args]
 
-  (connect)
+  (local-connect)
 
   (time
    (trace-files-for-namespaces "cljs." {:disable #{:expr :binding}})

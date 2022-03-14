@@ -1,5 +1,5 @@
 (ns flow-storm.debugger.ui.main
-  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler]]
+  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
             [flow-storm.debugger.ui.styles :as styles])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
@@ -13,13 +13,10 @@
 (defonce scene nil)
 (defonce stage nil)
 
-(def state (atom 0))
-
-(defn button-click-action []
-  (swap! state inc)
-  (-> (.lookup scene "#counter_label")
-      (.setText (str @state)))
-  )
+(defn update-trace-counter [cnt]
+  (run-later
+   (-> (.lookup scene "#trace_count_label")
+       (.setText (str cnt)))))
 
 (defn make-context-menu [items]
   (let [cm (ContextMenu.)
@@ -32,24 +29,40 @@
         (.addAll (into-array MenuItem cm-items)))
     cm))
 
+(defn trace-counter-box []
+  (let [box (HBox.) ; spacing
+        trace-cnt-label (doto (Label. "0")
+                          (.setId "trace_count_label"))]
+    (-> box
+        .getChildren
+        (.addAll [(Label. "Processed traces:")
+                  trace-cnt-label]))
+    box))
+
 (defn build-main-pane []
-  (doto (BorderPane.)
-    (.setTop (doto (Button. "Click me")
-               (.setOnAction (event-handler [ev] (button-click-action)))))
-    (.setCenter (doto (Label. (str "Helloooooo WOOOOOOOOOOORLD" @state))
-                  (.setId "counter_label")
-                  ))))
+  (let [mp (doto (BorderPane.)
+                    #_(.setStyle styles/backpane)
+                    (.setTop (doto (Button. "Click me")
+                               (.setOnAction (event-handler [ev] (println "Clicked")))))
+                    (.setCenter (doto (Pane.)
+                                  (.setStyle "-fx-background-color: red;")))
+                    (.setBottom (trace-counter-box)))]
 
-(defn rebuild-main-pane-content []
-  (let [children (.getChildren main-pane)]
-    (doto children
-      (.clear)
-      (.add (build-main-pane)))))
+    #_(.setOnContextMenuRequested mp
+                                (event-handler
+                                 [ev]
+                                 (.show ctx-menu
+                                        mp
+                                        (.getScreenX ev)
+                                        (.getScreenY ev))))
+    mp))
 
-(defn -main
-  ""
-  [& args]
+(defn reset-scene-main-pane []
+  (let [mp (build-main-pane)]
+    (alter-var-root #'main-pane (constantly mp))
+    (.setRoot scene mp)))
 
+(defn start-ui []
   ;; Initialize the JavaFX toolkit
   (javafx.embed.swing.JFXPanel.)
 
@@ -59,22 +72,9 @@
                                                                               (println "Bye bye")
                                                                               (System/exit 0))}])))
 
-  (alter-var-root #'main-pane (constantly (doto (Pane.)
-                                            (.setStyle styles/backpane))))
-
-  (rebuild-main-pane-content)
-
-  (.setOnContextMenuRequested main-pane
-                               (event-handler
-                                [ev]
-                                (.show ctx-menu
-                                       main-pane
-                                       (.getScreenX ev)
-                                       (.getScreenY ev))))
-
   (ui-utils/run-now
 
-   (let [scene (Scene. main-pane 800 600)]
+   (let [scene (Scene. (build-main-pane) 800 600)]
      (doto scene
        (.setOnKeyPressed (event-handler
                           [ke]
@@ -86,9 +86,18 @@
                                            (.setTitle "Flowstorm debugger")
                                            (.setScene scene)))))
 
+   (reset-scene-main-pane)
+
    (-> stage .show)))
 
+(defn -main
+  ""
+  [& args]
+
+  )
+
+(defn refresh-ui [] (ui-utils/run-now (reset-scene-main-pane)))
 
 (comment
-  (ui-utils/run-now (rebuild-main-pane-content))
+
   )
