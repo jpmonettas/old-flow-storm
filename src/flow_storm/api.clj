@@ -129,8 +129,11 @@
 
   (run-with-execution-ctx
    {}
-   (boo [2 3 4]))
+   (factorial 5)
+   #_(boo [2 3 4]))
 
+  (flow-storm.debugger.state/init-state!)
+  flow-storm.debugger.state/*state
   )
 
 ;; Run with : clj -X flow-storm.api/cljs-test

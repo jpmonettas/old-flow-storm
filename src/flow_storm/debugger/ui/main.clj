@@ -1,7 +1,8 @@
 (ns flow-storm.debugger.ui.main
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
             [flow-storm.debugger.ui.styles :as styles]
-            [flow-storm.debugger.ui.flows :as ui-flows])
+            [flow-storm.debugger.ui.flows :as ui-flows]
+            [flow-storm.debugger.ui.scene :as scene])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
@@ -12,12 +13,11 @@
 
 (defonce main-pane nil)
 (defonce ctx-menu nil)
-(defonce scene nil)
 (defonce stage nil)
 
 (defn update-trace-counter [cnt]
   (run-later
-   (-> (.lookup scene "#trace_count_label")
+   (-> (scene/lookup "#trace_count_label")
        (.setText (str cnt)))))
 
 (defn make-context-menu [items]
@@ -82,7 +82,7 @@
 (defn reset-scene-main-pane []
   (let [mp (build-main-pane)]
     (alter-var-root #'main-pane (constantly mp))
-    (.setRoot scene mp)))
+    (.setRoot scene/scene mp)))
 
 (defn start-ui []
   ;; Initialize the JavaFX toolkit
@@ -103,7 +103,7 @@
                             (let [key (.getName (.getCode ke))]
                               (println "Key pressed" key)))))
 
-       (alter-var-root #'scene (constantly scene))
+       (alter-var-root #'scene/scene (constantly scene))
        (alter-var-root #'stage (constantly (doto (Stage.)
                                              (.setTitle "Flowstorm debugger")
                                              (.setScene scene)))))

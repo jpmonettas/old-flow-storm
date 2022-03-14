@@ -175,29 +175,32 @@
    (let [*consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
          send-thread (Thread.
                       (fn []                        
-                        (while true                         
-                          (let [trace (.take trace-queue)                                
-                                qsize (.size trace-queue)]
+                        (while true                          
+                          (try
+                            (let [trace (.take trace-queue)                                
+                                 qsize (.size trace-queue)]
 
-                            ;; Consumer stats
-                            (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                              (when (zero? (mod cnt 100000))                                 
-                                (println (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
-                                                 cnt
-                                                 qsize
-                                                 (quot (- cnt last-report-cnt)
-                                                       (/ (double (- (System/nanoTime) last-report-t))
-                                                          1000000000.0))))
-                                (swap! *consumer-stats
-                                       assoc
-                                       :last-report-t (System/nanoTime)
-                                       :last-report-cnt cnt))
-                              
-                              (swap! *consumer-stats update :cnt inc))
-                            
-                            (send-fn trace)))))]
+                             ;; Consumer stats
+                             (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
+                               (when (zero? (mod cnt 100000))                                 
+                                 (println (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
+                                                  cnt
+                                                  qsize
+                                                  (quot (- cnt last-report-cnt)
+                                                        (/ (double (- (System/nanoTime) last-report-t))
+                                                           1000000000.0))))
+                                 (swap! *consumer-stats
+                                        assoc
+                                        :last-report-t (System/nanoTime)
+                                        :last-report-cnt cnt))
+                               
+                               (swap! *consumer-stats update :cnt inc))
+                             
+                             (send-fn trace))
+                            (catch Exception e
+                              (println "SendThread Exception" (.getMessage e))
+                              (.printStackTrace e))))))]
      
      (.start send-thread)
      
      nil)))
-
