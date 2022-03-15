@@ -263,14 +263,15 @@
                                ;; then remove it from ctx so fn* declared down the road don't think they are defn
                                instrument-fn-arities-bodies (fn [fn-name [arity-args-vec & arity-body-forms :as arity]]
                                                               (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
-
                                                                     outer-preamble (cond-> []
 
                                                                                      ;; if it is a top level fn* add a trace to register the form
                                                                                      defn-def
                                                                                      (into [`(~on-outer-form-init-fn {:form-id ~form-id
                                                                                                                       :ns ~form-ns}
-                                                                                              ~(pr-str (second orig-form)))])
+                                                                                              ;;~(pr-str (second orig-form))
+                                                                                              ~orig-form
+                                                                                              )])
 
                                                                                      true
                                                                                      (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
