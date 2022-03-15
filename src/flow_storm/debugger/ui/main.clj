@@ -2,22 +2,19 @@
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
-            [flow-storm.debugger.ui.scene :as scene])
+            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene scene-lookup]])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
            [javafx.scene.control Alert Alert$AlertType Button ButtonType ComboBox ContextMenu Dialog Label MenuItem TabPane TabPane$TabClosingPolicy Tab TableColumn TableView TextArea TextField]
-           [javafx.geometry Side]))
+           [javafx.geometry Side]
+           [javafx.application Platform]))
 
 (javafx.embed.swing.JFXPanel.)
 
-(defonce main-pane nil)
-(defonce ctx-menu nil)
-(defonce stage nil)
-
 (defn update-trace-counter [cnt]
   (run-later
-   (-> (scene/lookup "#trace_count_label")
+   (-> (scene-lookup "#trace_count_label")
        (.setText (str cnt)))))
 
 (defn make-context-menu [items]
@@ -62,6 +59,11 @@
 
     tabs-p))
 
+(defn close-stage []
+  (when stage
+    (ui-utils/run-now
+     (.close stage))))
+
 (defn build-main-pane []
   (let [mp (doto (BorderPane.)
                     #_(.setStyle styles/backpane)
@@ -70,29 +72,27 @@
                     (.setCenter (main-tabs-pane))
                     (.setBottom (trace-counter-box)))]
 
-    (.setOnContextMenuRequested mp
-                                (event-handler
-                                 [ev]
-                                 (.show ctx-menu
-                                        mp
-                                        (.getScreenX ev)
-                                        (.getScreenY ev))))
+
+    (let [ctx-menu (make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
+                                       {:text "Quit" :on-click  #(close-stage)}])]
+      (.setOnContextMenuRequested mp
+                                  (event-handler
+                                   [ev]
+                                   (.show ctx-menu
+                                          mp
+                                          (.getScreenX ev)
+                                          (.getScreenY ev)))))
     mp))
 
 (defn reset-scene-main-pane []
   (let [mp (build-main-pane)]
     (alter-var-root #'main-pane (constantly mp))
-    (.setRoot scene/scene mp)))
+    (.setRoot scene mp)))
 
 (defn start-ui []
   ;; Initialize the JavaFX toolkit
   (javafx.embed.swing.JFXPanel.)
-
-  (alter-var-root #'ctx-menu
-                  (constantly (make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
-                                                  {:text "Quit" :on-click  #(do
-                                                                              (println "Bye bye")
-                                                                              (System/exit 0))}])))
+  (Platform/setImplicitExit false)
 
   (ui-utils/run-now
    (try
@@ -103,7 +103,7 @@
                             (let [key (.getName (.getCode ke))]
                               (println "Key pressed" key)))))
 
-       (alter-var-root #'scene/scene (constantly scene))
+       (alter-var-root #'scene (constantly scene))
        (alter-var-root #'stage (constantly (doto (Stage.)
                                              (.setTitle "Flowstorm debugger")
                                              (.setScene scene)))))
@@ -121,13 +121,6 @@
   [& args]
 
   )
-
-(defn refresh-ui []
-  (ui-utils/run-now
-   (try (reset-scene-main-pane)
-        (catch Exception e
-          (println "UI Thread exception")
-          (.printStackTrace e)))))
 
 (comment
 

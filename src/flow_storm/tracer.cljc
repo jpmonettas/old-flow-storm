@@ -10,7 +10,8 @@
            [java.util.concurrent ArrayBlockingQueue]
            [java.io FileOutputStream ByteArrayOutputStream DataOutputStream]))
 
-(defonce trace-queue (ArrayBlockingQueue. 20000000))
+(def trace-queue nil)
+(defonce send-thread nil)
 
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* nil)
@@ -168,39 +169,51 @@
 
 
 (defn connect
-  "Connects to the flow-storm debugger.
-  When connection is ready, replies any events hold in `pre-conn-events-holder`"
+  "Connects to the flow-storm debugger. `"
   ([] (connect nil))
   ([{:keys [tap-name send-fn]}]
-   (let [*consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
+
+   ;; Stop the previous running `send-thread` if we have one
+   ;; since we could be trying to reconnect
+   (when send-thread (.stop send-thread))
+   
+   (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 20000000)))
+         *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
+         
          send-thread (Thread.
-                      (fn []                        
-                        (while true                          
+                      (fn []
+                        
+                        (while (not (.isInterrupted (Thread/currentThread)))                          
                           (try
                             (let [trace (.take trace-queue)                                
-                                 qsize (.size trace-queue)]
+                                  qsize (.size trace-queue)]
 
-                             ;; Consumer stats
-                             (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                               (when (zero? (mod cnt 100000))                                 
-                                 (println (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
-                                                  cnt
-                                                  qsize
-                                                  (quot (- cnt last-report-cnt)
-                                                        (/ (double (- (System/nanoTime) last-report-t))
-                                                           1000000000.0))))
-                                 (swap! *consumer-stats
-                                        assoc
-                                        :last-report-t (System/nanoTime)
-                                        :last-report-cnt cnt))
-                               
-                               (swap! *consumer-stats update :cnt inc))
-                             
-                             (send-fn trace))
+                              ;; Consumer stats
+                              (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
+                                (when (zero? (mod cnt 100000))                                 
+                                  (println (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
+                                                   cnt
+                                                   qsize
+                                                   (quot (- cnt last-report-cnt)
+                                                         (/ (double (- (System/nanoTime) last-report-t))
+                                                            1000000000.0))))
+                                  (swap! *consumer-stats
+                                         assoc
+                                         :last-report-t (System/nanoTime)
+                                         :last-report-cnt cnt))
+                                
+                                (swap! *consumer-stats update :cnt inc))
+                              
+                              (send-fn trace))
                             (catch Exception e
                               (println "SendThread Exception" (.getMessage e))
-                              (.printStackTrace e))))))]
-     
+                              (.printStackTrace e))))
+                        (println "Thread interrupted. Dying...")))]
+     (alter-var-root #'send-thread (constantly send-thread))
      (.start send-thread)
      
      nil)))
+
+
+(defn stop-send-thread []
+  (when send-thread (.interrupt send-thread)))
