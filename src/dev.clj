@@ -31,6 +31,8 @@
 ;; Utilities for reloading everything ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(add-tap (bound-fn* clojure.pprint/pprint))
+
 (defn start-and-add-data []
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue
   (fs-api/local-connect)

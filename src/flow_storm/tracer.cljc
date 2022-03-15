@@ -191,12 +191,12 @@
                               ;; Consumer stats
                               (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
                                 (when (zero? (mod cnt 100000))                                 
-                                  (println (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
-                                                   cnt
-                                                   qsize
-                                                   (quot (- cnt last-report-cnt)
-                                                         (/ (double (- (System/nanoTime) last-report-t))
-                                                            1000000000.0))))
+                                  (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
+                                                cnt
+                                                qsize
+                                                (quot (- cnt last-report-cnt)
+                                                      (/ (double (- (System/nanoTime) last-report-t))
+                                                         1000000000.0))))
                                   (swap! *consumer-stats
                                          assoc
                                          :last-report-t (System/nanoTime)
@@ -206,9 +206,9 @@
                               
                               (send-fn trace))
                             (catch Exception e
-                              (println "SendThread Exception" (.getMessage e))
-                              (.printStackTrace e))))
-                        (println "Thread interrupted. Dying...")))]
+                              (tap> (str "SendThread Exception" (.getMessage e)
+                                         (with-out-str (.printStackTrace e)))))))
+                        (tap> "Thread interrupted. Dying...")))]
      (alter-var-root #'send-thread (constantly send-thread))
      (.start send-thread)
      

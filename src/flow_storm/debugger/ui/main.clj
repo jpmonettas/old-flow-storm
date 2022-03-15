@@ -113,8 +113,8 @@
      (-> stage .show)
 
      (catch Exception e
-       (println "UI Thread exception")
-       (.printStackTrace e)))))
+       (tap> (str "UI Thread exception"
+                  (with-out-str (.printStackTrace e))))))))
 
 (defn -main
   ""

@@ -15,9 +15,9 @@
 (s/def ::exec-trace    #(instance? ExecTrace %))
 
 (s/def :form/ns string?)
-(s/def :form/str string?)
+(s/def :form/form any?)
 (s/def :form/pprint-tokens (s/coll-of any? :kind vector?)) ;; TODO: finish this
-(s/def :flow/form (s/keys :req [:form/id :form/ns :form/str :form/pprint-tokens]))
+(s/def :flow/form (s/keys :req [:form/id :form/ns :form/form :form/pprint-tokens]))
 (s/def :flow/forms (s/map-of :form/id :flow/form))
 
 (s/def :thread/exec-trace (s/or :fn-call ::fn-call-trace :expr ::exec-trace))
@@ -65,7 +65,7 @@
                   :validator (fn [next-state]
                                (if-not (s/valid? ::state next-state)
                                  (do
-                                   (s/explain ::state next-state)
+                                   (tap> (str "STATE Error" (with-out-str (s/explain ::state next-state))))
                                    false)
 
                                  true))))
