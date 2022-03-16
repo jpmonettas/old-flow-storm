@@ -68,6 +68,13 @@
   (reset! *state initial-state))
 
 ;;;;;;;;;;;
+;; Utils ;;
+;;;;;;;;;;;
+
+(defn exec-trace? [trace]
+  (instance? ExecTrace trace))
+
+;;;;;;;;;;;
 ;; Flows ;;
 ;;;;;;;;;;;
 
@@ -81,7 +88,6 @@
   {:flow/id flow-id
    :flow/threads {}
    :timestamp timestamp})
-
 
 ;;;;;;;;;;;;;
 ;; Threads ;;
@@ -99,6 +105,30 @@
    :thread/execution {:thread/traces []
                       :thread/curr-trace-idx nil}
    :thread/bind-traces []})
+
+(defn add-execution-trace [state {:keys [flow-id thread-id] :as trace}]
+  (update-in state [:flows flow-id :flow/threads thread-id :thread/execution]
+             (fn [execution]
+               (-> execution
+                   (update :thread/traces conj trace)
+                   (update :thread/curr-trace-idx #(or % 0))))))
+
+(defn add-bind-trace [state {:keys [flow-id thread-id] :as trace}]
+  (update-in state [:flows flow-id :flow/threads thread-id :thread/bind-traces] conj trace))
+
+(defn thread-curr-trace-idx [state flow-id thread-id]
+  (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx]))
+
+(defn set-thread-curr-trace-idx [state flow-id thread-id idx]
+  (assoc-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx] idx))
+
+(defn thread-trace [state flow-id thread-id idx]
+  (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/traces idx]))
+
+(defn thread-exec-trace-count [state flow-id thread-id]
+  (-> state
+      (get-in [:flows flow-id :flow/threads thread-id :thread/execution :thread/traces])
+      count))
 
 ;;;;;;;;;;;
 ;; Forms ;;

@@ -39,15 +39,15 @@
 
   ExecTrace
   (process [trace]
-    )
+    (swap! state/*state state/add-execution-trace trace))
 
   FnCallTrace
   (process [trace]
-    )
+    (swap! state/*state state/add-execution-trace trace))
 
   BindTrace
   (process [trace]
-    ))
+    (swap! state/*state state/add-bind-trace trace)))
 
 (defn dispatch-trace [trace]
   (process trace)

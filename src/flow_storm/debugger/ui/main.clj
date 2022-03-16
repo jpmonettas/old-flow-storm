@@ -67,7 +67,7 @@
 (defn build-main-pane []
   (let [mp (doto (BorderPane.)
                     #_(.setStyle styles/backpane)
-                    (.setTop (doto (Button. "Click me")
+                    #_(.setTop (doto (Button. "Click me")
                                (.setOnAction (event-handler [ev] (println "Clicked")))))
                     (.setCenter (main-tabs-pane))
                     (.setBottom (trace-counter-box)))]
