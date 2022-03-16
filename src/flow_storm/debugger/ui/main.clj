@@ -2,7 +2,7 @@
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
-            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene scene-lookup]])
+            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
@@ -14,7 +14,7 @@
 
 (defn update-trace-counter [cnt]
   (run-later
-   (-> (scene-lookup "#trace_count_label")
+   (-> (obj-lookup "trace_count_label")
        (.setText (str cnt)))))
 
 (defn make-context-menu [items]
@@ -30,8 +30,8 @@
 
 (defn trace-counter-box []
   (let [box (HBox.) ; spacing
-        trace-cnt-label (doto (Label. "0")
-                          (.setId "trace_count_label"))]
+        trace-cnt-label (Label. "0")]
+    (store-obj "trace_count_label" trace-cnt-label)
     (-> box
         .getChildren
         (.addAll [(Label. "Processed traces:")
@@ -96,7 +96,7 @@
 
   (ui-utils/run-now
    (try
-     (let [scene (Scene. (build-main-pane) 800 600)]
+     (let [scene (Scene. (build-main-pane) 1024 768)]
        (doto scene
          (.setOnKeyPressed (event-handler
                             [ke]

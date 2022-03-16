@@ -8,6 +8,13 @@
 
 (add-tap (bound-fn* pp/pprint))
 
+(Thread/setDefaultUncaughtExceptionHandler
+   (reify
+     Thread$UncaughtExceptionHandler
+     (uncaughtException [this thread throwable]
+       (tap> (str "Unhandled exception " thread throwable))
+       (tap> throwable))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Some testing code ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,14 +34,14 @@
 (defn run-some-traced []
   (fs-api/run-with-execution-ctx
    {}
-   (factorial 5)
-   #_(boo [2 3 4])))
+   (boo [2 3 4])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Utilities for reloading everything ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn start-and-add-data []
+
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue
   (fs-api/local-connect)
 

@@ -16,7 +16,11 @@
 (defn local-connect []
   (start-debugger)
   (tracer/connect {:send-fn (fn [trace]
-                              (trace-processor/dispatch-trace trace))}))
+                              (try
+                                (trace-processor/dispatch-trace trace)
+                                (catch Exception e
+                                  (tap> (str "Exception dispatching trace " (.getMessage e)))
+                                  (tap> e))))}))
 
 (defn ws-connect [opts]
   (let [{:keys [send-fn]} (tracer/build-ws-sender opts)]
@@ -105,12 +109,6 @@
   `(binding [tracer/*init-traced-forms* (atom #{})
              tracer/*flow-id* 0]
      ~form))
-
-(Thread/setDefaultUncaughtExceptionHandler
-   (reify
-     Thread$UncaughtExceptionHandler
-     (uncaughtException [this thread throwable]
-       (println "Unhandled exception " thread throwable))))
 
 (comment
 

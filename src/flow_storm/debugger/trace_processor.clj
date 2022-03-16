@@ -2,6 +2,8 @@
   (:require [flow-storm.debugger.state :as state]
             [flow-storm.debugger.ui.main :as ui-main]
             [flow-storm.debugger.ui.flows :as ui-flows]
+            [clojure.pprint :as pp]
+            [flow-storm.debugger.form-pprinter :as form-pprinter]
             flow-storm.tracer)
   (:import [flow_storm.tracer InitTrace ExecTrace FnCallTrace BindTrace]))
 
@@ -29,10 +31,11 @@
       (ui-flows/create-empty-thread flow-id thread-id))
 
     ;; add the form
-
-    (let [new-form (state/create-form form-id ns form)]
-      (swap! state/*state state/add-form flow-id thread-id new-form))
-    #_(ui-flows/add-form flow-id thread-id new-form))
+    (let [new-form (state/create-form form-id ns form)
+          form-ptokens (binding [pp/*print-right-margin* 60]
+                         (form-pprinter/pprint-tokens form))]
+      (swap! state/*state state/add-form flow-id thread-id new-form)
+      (ui-flows/add-form flow-id thread-id form-id ns form-ptokens)))
 
   ExecTrace
   (process [trace]

@@ -6,13 +6,22 @@
 
 (defmacro run-later
   [& body]
-  `(run-later* (fn [] ~@body)))
+  `(run-later* (fn []
+                 (try
+                   ~@body
+                   (catch Exception e#
+                     (tap> (str "Exception in UI thread @1 " (.getMessage e#)))
+                     (tap> e#))))))
 
 (defn run-now*
   [f]
   (let [result (promise)]
     (run-later
-     (deliver result (try (f) (catch Throwable e e))))
+     (deliver result (try (f)
+                          (catch Exception e
+                            (tap> (str "Exception in UI thread @2" (.getMessage e)))
+                            (tap> e)
+                            (tap> (.getCause e))))))
     @result))
 
 (defmacro run-now

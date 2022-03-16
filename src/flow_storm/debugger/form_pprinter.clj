@@ -1,13 +1,13 @@
 (ns flow-storm.debugger.form-pprinter
   (:require [clojure.pprint :as pp]))
 
-(defn seq-delims [form]
+(defn- seq-delims [form]
   (let [delims (pr-str (empty form))]
     (if (= (count delims) 2)
       [(str (first delims)) (str (second delims))]
       ["#{" "}"])))
 
-(defn form-tokens
+(defn- form-tokens
   ([form] (form-tokens form []))
   ([form curr-coord]
    (cond
@@ -25,7 +25,7 @@
      :else
      [[(pr-str form) curr-coord]])))
 
-(defn consecutive-inv-chars [inv-chars-map idx]
+(defn- consecutive-inv-chars [inv-chars-map idx]
   (loop [i (inc idx)
          inv-chars [(inv-chars-map idx)]]
     (if-let [inv-char (inv-chars-map i)]
@@ -57,7 +57,7 @@
                        (into  [tok]))))
           (recur next-tokens (+ i (count tname)) (into final-toks [tok])))))))
 
-(defn debug-print-tokens [ptokens]
+(defn- debug-print-tokens [ptokens]
   (doseq [t ptokens]
     (cond
       (= :sp t) (print " ")
