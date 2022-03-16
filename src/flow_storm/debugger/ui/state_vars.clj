@@ -20,32 +20,31 @@
 (defn store-obj
 
   ([obj-id obj-ref]
-   (swap! ui-objs assoc obj-id obj-ref)
+   (swap! ui-objs update obj-id conj obj-ref)
    #_(tap> (format "Stored obj at key: %s" obj-id)))
 
   ([flow-id obj-id obj-ref]
    (swap! flows-ui-objs update flow-id (fn [flow-objs]
-                                         (assoc flow-objs obj-id obj-ref)))
+                                         (update flow-objs obj-id conj obj-ref)))
    #_(tap> (format "Stored %d flow obj at key %s" flow-id obj-id))))
 
 (defn obj-lookup
-
   ([obj-id]
    (let [all-objs @ui-objs
-         obj (get all-objs obj-id)]
-     (when-not obj
+         objs (get all-objs obj-id)]
+     (when-not objs
        (tap> (format "Object not found %s" obj-id))
        (tap> (keys all-objs)))
-     obj))
+     objs))
 
   ([flow-id obj-id]
 
    (let [all-objs @flows-ui-objs
-         obj (get-in all-objs [flow-id obj-id])]
-     (when-not obj
+         objs (get-in all-objs [flow-id obj-id])]
+     (when-not objs
        (tap> (format "Flow object not found flow-id: %d obj-id: %s" flow-id obj-id))
        (tap> (keys (get all-objs flow-id))))
-     obj)))
+     objs)))
 
 (defn clean-flow-objs [flow-id]
   (update flows-ui-objs dissoc flow-id))

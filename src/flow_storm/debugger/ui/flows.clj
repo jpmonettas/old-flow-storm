@@ -4,14 +4,14 @@
             [flow-storm.debugger.state :as state])
   (:import [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
            [javafx.scene.control Button Label Tab TabPane TabPane$TabClosingPolicy SplitPane]
-           [javafx.scene.text TextFlow Text]
+           [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
-           [javafx.geometry Side Orientation]))
+           [javafx.geometry Side Orientation Pos]))
 
 (defn create-empty-flow [flow-id]
   (run-now
-   (let [flows-tabs-pane (obj-lookup "flows_tabs_pane")
+   (let [[flows-tabs-pane] (obj-lookup "flows_tabs_pane")
          threads-tab-pane (doto (TabPane.)
                             (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
          _ (store-obj flow-id "threads_tabs_pane" threads-tab-pane)
@@ -67,21 +67,24 @@
       (let [curr-idx (state/thread-curr-trace-idx @state/*state flow-id thread-id)
             from-trace (state/thread-trace @state/*state flow-id thread-id curr-idx)
             to-trace (state/thread-trace @state/*state flow-id thread-id new-trace-idx)
-            curr_trace_lbl (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
+            [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
 
         (.setText curr_trace_lbl (str new-trace-idx))
 
         (when (state/exec-trace? from-trace)
-          (let [from-token-text (obj-lookup flow-id (state-vars/form-token-id thread-id
+          (let [from-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                               (:form-id from-trace)
                                                                               (:coor from-trace)))]
-            (un-highlight from-token-text)))
+            (doseq [text from-token-texts]
+              (un-highlight text))))
 
         (when (state/exec-trace? to-trace)
-          (let [to-token-text (obj-lookup flow-id (state-vars/form-token-id thread-id
+          (let [to-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                             (:form-id to-trace)
                                                                             (:coor to-trace)))]
-            (highlight to-token-text)))
+
+            (doseq [text to-token-texts]
+              (highlight text))))
 
         (swap! state/*state state/set-thread-curr-trace-idx flow-id thread-id new-trace-idx)))))
 
@@ -130,7 +133,7 @@
 
 (defn create-empty-thread [flow-id thread-id]
   (run-now
-   (let [threads-tabs-pane (obj-lookup flow-id "threads_tabs_pane")
+   (let [[threads-tabs-pane] (obj-lookup flow-id "threads_tabs_pane")
          thread-tab-pane (create-thread-pane flow-id thread-id)
          thread-tab (doto (Tab. (str "thread-" thread-id))
                       (.setContent thread-tab-pane))]
@@ -140,7 +143,7 @@
 
 (defn add-form [flow-id thread-id form-id form-ns print-tokens]
   (run-now
-   (let [forms-box (obj-lookup flow-id (format "forms_box_%d" thread-id))
+   (let [[forms-box] (obj-lookup flow-id (format "forms_box_%d" thread-id))
          tokens-texts (->> print-tokens
                            (map (fn [tok]
                                   (let [text (Text.
@@ -151,12 +154,18 @@
                                         coord (when (vector? tok) (second tok))]
                                     (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
                                     text))))
-         form-text-flow (doto (TextFlow. (into-array Text tokens-texts))
+         ns-label (doto (Label. (format "ns: %s" form-ns))
+                    (.setFont (Font. 10)))
+
+         form-header (doto (HBox. (into-array Node [ns-label]))
+                       (.setAlignment (Pos/TOP_RIGHT)))
+         form-text-flow (TextFlow. (into-array Text tokens-texts))
+         form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
                           (.setStyle "-fx-padding: 10; -fx-background-color: #eee;"))]
 
      (-> forms-box
          .getChildren
-         (.addAll [form-text-flow])))))
+         (.add 0 form-pane)))))
 
 (defn main-pane []
 

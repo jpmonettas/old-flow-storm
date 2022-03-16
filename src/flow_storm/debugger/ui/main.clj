@@ -14,7 +14,7 @@
 
 (defn update-trace-counter [cnt]
   (run-later
-   (-> (obj-lookup "trace_count_label")
+   (-> (first (obj-lookup "trace_count_label"))
        (.setText (str cnt)))))
 
 (defn make-context-menu [items]
