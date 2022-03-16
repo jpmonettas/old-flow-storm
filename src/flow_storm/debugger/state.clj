@@ -16,35 +16,29 @@
 
 (s/def :form/ns string?)
 (s/def :form/form any?)
-(s/def :form/pprint-tokens (s/coll-of any? :kind vector?)) ;; TODO: finish this
-(s/def :flow/form (s/keys :req [:form/id :form/ns :form/form :form/pprint-tokens]))
-(s/def :flow/forms (s/map-of :form/id :flow/form))
+
+(s/def :thread/form (s/keys :req [:form/id :form/ns :form/form]))
+(s/def :thread/forms (s/map-of :form/id :thread/form))
 
 (s/def :thread/exec-trace (s/or :fn-call ::fn-call-trace :expr ::exec-trace))
 
 (s/def :thread/traces (s/coll-of :thread/exec-trace :kind vector?))
 
-(s/def :thread/curr-trace-idx number?)
+(s/def :thread/curr-trace-idx (s/nilable number?))
 
 (s/def :thread/execution (s/keys :req [:thread/traces
                                        :thread/curr-trace-idx]))
 
-(s/def :thread/callstack-tree any?) ;; TODO: finish this
-
 (s/def :thread/bind-traces (s/coll-of ::bind-trace :kind vector?))
-(s/def :thread/hot-coords (s/coll-of :form/coord :kind set?))
 
 (s/def ::thread (s/keys :req [:thread/id
+                              :thread/forms
                               :thread/execution
-                              :thread/callstack-tree
-                              :thread/bind-traces
-                              :thread/hot-coords
-                              ]))
+                              :thread/bind-traces]))
 
 (s/def :flow/threads (s/map-of :thread/id ::thread))
 
 (s/def ::flow (s/keys :req [:flow/id
-                            :flow/forms
                             :flow/threads]
                       :req-un [::timestamp]))
 
@@ -72,3 +66,48 @@
 
 (defn init-state! []
   (reset! *state initial-state))
+
+;;;;;;;;;;;
+;; Flows ;;
+;;;;;;;;;;;
+
+(defn flow [state flow-id]
+  (get-in state [:flows flow-id]))
+
+(defn add-flow [state flow]
+  (assoc-in state [:flows (:flow/id flow)] flow))
+
+(defn empty-flow [flow-id timestamp]
+  {:flow/id flow-id
+   :flow/threads {}
+   :timestamp timestamp})
+
+
+;;;;;;;;;;;;;
+;; Threads ;;
+;;;;;;;;;;;;;
+
+(defn thread [state flow-id thread-id]
+  (get-in state [:flows flow-id :flow/threads thread-id]))
+
+(defn add-thread [state flow-id thread]
+  (assoc-in state [:flows flow-id :flow/threads (:thread/id thread)] thread))
+
+(defn empty-thread [thread-id]
+  {:thread/id thread-id
+   :thread/forms {}
+   :thread/execution {:thread/traces []
+                      :thread/curr-trace-idx nil}
+   :thread/bind-traces []})
+
+;;;;;;;;;;;
+;; Forms ;;
+;;;;;;;;;;;
+
+(defn create-form [form-id form-ns form]
+  {:form/id form-id
+   :form/ns form-ns
+   :form/form form})
+
+(defn add-form [state flow-id thread-id form]
+  (assoc-in state [:flows flow-id :flow/threads thread-id :thread/forms (:form/id form)] form))

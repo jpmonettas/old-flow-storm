@@ -3,7 +3,10 @@
             [flow-storm.debugger.main :as dbg-main]
             [flow-storm.api :as fs-api]
             [flow-storm.tracer :as tracer]
-            [clojure.tools.namespace.repl :refer [refresh]]))
+            [clojure.tools.namespace.repl :refer [refresh]]
+            [clojure.pprint :as pp]))
+
+(add-tap (bound-fn* pp/pprint))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Some testing code ;;
@@ -30,8 +33,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Utilities for reloading everything ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(add-tap (bound-fn* clojure.pprint/pprint))
 
 (defn start-and-add-data []
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue

@@ -16,7 +16,7 @@
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* nil)
 
-(defrecord InitTrace [flow-id form-id form ns timestamp])
+(defrecord InitTrace [flow-id form-id thread-id form ns timestamp])
 (defrecord ExecTrace [flow-id form-id coor thread-id result outer-form?])
 (defrecord FnCallTrace [flow-id form-id fn-name fn-ns thread-id args-vec timestamp])
 (defrecord BindTrace [flow-id form-id coor thread-id timestamp symbol value])
@@ -38,15 +38,18 @@
 
 (defn trace-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id args-vec fn-name ns]} form]
-  (when-not (contains? @*init-traced-forms* [*flow-id* form-id])
-    (let [trace (map->InitTrace {:flow-id *flow-id*
-                                 :form-id form-id
-                                 :form form
-                                 :ns ns
-                                 :timestamp (get-timestamp)})]      
-      (.put trace-queue trace)
-      (swap! *init-traced-forms* conj [*flow-id* form-id]))))
+  [{:keys [form-id args-vec fn-name ns]} form]  
+  (let [thread-id (.getId (Thread/currentThread))]
+    (when-not (contains? @*init-traced-forms* [*flow-id* thread-id form-id])
+      (let [
+            trace (map->InitTrace {:flow-id *flow-id*
+                                   :form-id form-id
+                                   :thread-id thread-id
+                                   :form form
+                                   :ns ns
+                                   :timestamp (get-timestamp)})]      
+        (.put trace-queue trace)
+        (swap! *init-traced-forms* conj [*flow-id* thread-id form-id])))))
 
 (defn trace-expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
@@ -205,9 +208,11 @@
                                 (swap! *consumer-stats update :cnt inc))
                               
                               (send-fn trace))
+                            (catch java.lang.InterruptedException ie nil)
+                            (catch java.lang.IllegalMonitorStateException imse nil)
                             (catch Exception e
-                              (tap> (str "SendThread Exception" (.getMessage e)
-                                         (with-out-str (.printStackTrace e)))))))
+                              (tap> "SendThread consumer exception")
+                              (tap> e))))
                         (tap> "Thread interrupted. Dying...")))]
      (alter-var-root #'send-thread (constantly send-thread))
      (.start send-thread)

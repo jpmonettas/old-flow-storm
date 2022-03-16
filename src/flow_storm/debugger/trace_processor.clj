@@ -1,5 +1,5 @@
 (ns flow-storm.debugger.trace-processor
-  (:require [flow-storm.debugger.state :as dbg-state]
+  (:require [flow-storm.debugger.state :as state]
             [flow-storm.debugger.ui.main :as ui-main]
             [flow-storm.debugger.ui.flows :as ui-flows]
             flow-storm.tracer)
@@ -10,37 +10,29 @@
 
 
 (defn increment-trace-counter []
-  (swap! dbg-state/*state update :trace-counter inc)
-  (ui-main/update-trace-counter (:trace-counter @dbg-state/*state)))
+  (swap! state/*state update :trace-counter inc)
+  (ui-main/update-trace-counter (:trace-counter @state/*state)))
 
-(defn create-empty-flow [state flow-id timestamp]
-  (assoc-in state [:flows flow-id] {:flow/id flow-id
-                                    :flow/forms {}
-                                    :flow/threads {}
-                                    :timestamp timestamp
-                                    }))
 
-(defn form-pprint-tokens [form]
-  ;; TODO: print tokens
-  [])
-
-(defn create-form [id ns form]
-  {:form/id id
-   :form/ns ns
-   :form/form form
-   :form/pprint-tokens (form-pprint-tokens form)})
 
 (extend-protocol ProcessTrace
   InitTrace
-  (process [{:keys [flow-id form-id form ns timestamp]}]
-    (when-not (contains? (:flows @dbg-state/*state) flow-id)
-      ;; flow doesn't exist, create one
-      (swap! dbg-state/*state create-empty-flow flow-id timestamp)
+  (process [{:keys [flow-id form-id thread-id form ns timestamp] :as t}]
+    ;; if flow doesn't exist, create one
+    (when-not (state/flow @state/*state flow-id)
+      (swap! state/*state state/add-flow (state/empty-flow flow-id timestamp))
       (ui-flows/create-empty-flow flow-id))
-    (swap! dbg-state/*state
-           (fn [state]
-             (let [new-form (create-form form-id ns form)]
-               (assoc-in state [:flows flow-id :flow/forms form-id] new-form)))))
+
+    ;; if thread doesn't exist, create one
+    (when-not (state/thread @state/*state flow-id thread-id)
+      (swap! state/*state state/add-thread flow-id (state/empty-thread thread-id))
+      (ui-flows/create-empty-thread flow-id thread-id))
+
+    ;; add the form
+
+    (let [new-form (state/create-form form-id ns form)]
+      (swap! state/*state state/add-form flow-id thread-id new-form))
+    #_(ui-flows/add-form flow-id thread-id new-form))
 
   ExecTrace
   (process [trace]
