@@ -58,3 +58,12 @@
 
 (defn thread-curr-trace-lbl-id [thread-id]
   (format "thread_curr_trace_lbl_%d" thread-id))
+
+(defn thread-forms-box-id [thread-id]
+  (format "forms_box_%d" thread-id))
+
+(defn thread-result-text-area-id [thread-id]
+  (format "result_text_area_%d" thread-id))
+
+(defn thread-locals-list-id [thread-id]
+  (format "locals_list_%d" thread-id))

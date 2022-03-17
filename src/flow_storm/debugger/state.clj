@@ -166,6 +166,10 @@
       (get-in [:flows flow-id :flow/threads thread-id :thread/callstack-tree])
       (callstack-tree/find-frame trace-idx)))
 
+(defn bindings-for-trace [state flow-id thread-id trace-idx]
+  (-> (thread-find-frame state flow-id thread-id trace-idx)
+      :bindings))
+
 ;;;;;;;;;;;
 ;; Forms ;;
 ;;;;;;;;;;;

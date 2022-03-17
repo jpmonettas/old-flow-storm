@@ -1,13 +1,15 @@
 (ns flow-storm.debugger.ui.flows
   (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now]]
+            [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state])
-  (:import [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
-           [javafx.scene.control Button Label Tab TabPane TabPane$TabClosingPolicy SplitPane]
+  (:import [javafx.scene.layout BorderPane GridPane HBox Priority Pane VBox]
+           [javafx.scene.control Button Label ListView ListCell TextArea Tab TabPane TabPane$TabClosingPolicy SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
-           [javafx.geometry Side Orientation Pos]))
+           [javafx.geometry Side Orientation Pos]
+           [javafx.collections FXCollections]))
 
 (defn create-empty-flow [flow-id]
   (run-now
@@ -24,14 +26,66 @@
 (defn- create-forms-pane [flow-id thread-id]
   (let [box (doto (VBox.)
               (.setSpacing 5))]
-    (store-obj flow-id (format "forms_box_%d" thread-id) box)
+    (store-obj flow-id (state-vars/thread-forms-box-id thread-id) box)
     box))
 
-(defn- create-result-pane []
-  (Label. "Result"))
+(defn create-result-pprint-pane [flow-id thread-id]
+  (let [result-text-area (doto (TextArea.)
+                           (.setEditable false))]
+    (store-obj flow-id (state-vars/thread-result-text-area-id thread-id) result-text-area)
+    result-text-area))
 
-(defn- create-locals-pane []
-  (Label. "Locals"))
+(defn create-result-tree-pane [flow-id thread-id]
+  (Label. "TREE")
+  )
+
+(defn update-result-pane [flow-id thread-id val]
+  ;; TODO: find and update the tree
+  (let [[text-area] (obj-lookup flow-id (state-vars/thread-result-text-area-id thread-id))
+        val-str (with-out-str (pp/pprint val))]
+    (.setText text-area val-str)))
+
+(defn- create-result-pane [flow-id thread-id]
+  (let [tools-tab-pane (doto (TabPane.)
+                         (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
+        pprint-tab (doto (Tab. "Pprint")
+                     (.setContent (create-result-pprint-pane flow-id thread-id)))
+        tree-tab (doto (Tab. "Tree")
+                   (.setContent (create-result-tree-pane flow-id thread-id)))]
+    (-> tools-tab-pane
+        .getTabs
+        (.addAll [pprint-tab tree-tab]))
+
+    tools-tab-pane))
+
+(defn- format-local-val [v]
+  (let [s (pr-str v)]
+    (subs s 0 (min 80 (count s)))))
+
+(defn- create-locals-pane [flow-id thread-id]
+  (let [observable-bindings-list (FXCollections/observableArrayList)
+        cell-factory (proxy [javafx.util.Callback] []
+                       (call [lv]
+                         (proxy [ListCell] []
+                           (updateItem [symb-val empty?]
+                             (proxy-super updateItem symb-val empty?)
+                             (if empty?
+                               (.setText this nil)
+                               (let [symb-lbl (doto (Label. (first symb-val))
+                                                (.setPrefWidth 100))
+                                     val-lbl (Label.  (format-local-val (second symb-val)))
+                                     hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
+                                 (.setGraphic this hbox)))))))
+        locals-list-view (doto (ListView. observable-bindings-list)
+                           (.setEditable false)
+                           (.setCellFactory cell-factory))]
+    (store-obj flow-id (state-vars/thread-locals-list-id thread-id) observable-bindings-list)
+    locals-list-view))
+
+(defn- update-locals-pane [flow-id thread-id bindings]
+  (let [[observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
+    (.clear observable-bindings-list)
+    (.addAll observable-bindings-list (into-array Object bindings))))
 
 (defn- create-code-pane [flow-id thread-id]
   (let [left-right-pane (doto (SplitPane.)
@@ -39,8 +93,8 @@
         locals-result-pane (doto (SplitPane.)
                              (.setOrientation (Orientation/VERTICAL)))
         forms-pane (create-forms-pane flow-id thread-id)
-        result-pane (create-result-pane)
-        locals-pane (create-locals-pane)]
+        result-pane (create-result-pane flow-id thread-id)
+        locals-pane (create-locals-pane flow-id thread-id)]
 
     (-> locals-result-pane
         .getItems
@@ -62,11 +116,12 @@
     (.setFill (Color/BLACK))))
 
 (defn- jump-to-coord [flow-id thread-id new-trace-idx]
-  (let [trace-count (state/thread-exec-trace-count @state/*state flow-id thread-id)]
+  (let [state @state/*state
+        trace-count (state/thread-exec-trace-count state flow-id thread-id)]
     (when (<= 0 new-trace-idx (dec trace-count))
-      (let [curr-idx (state/thread-curr-trace-idx @state/*state flow-id thread-id)
-            from-trace (state/thread-trace @state/*state flow-id thread-id curr-idx)
-            to-trace (state/thread-trace @state/*state flow-id thread-id new-trace-idx)
+      (let [curr-idx (state/thread-curr-trace-idx state flow-id thread-id)
+            from-trace (state/thread-trace state flow-id thread-id curr-idx)
+            to-trace (state/thread-trace state flow-id thread-id new-trace-idx)
             [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
 
         ;; update thread current trace lable
@@ -89,8 +144,12 @@
             (doseq [text to-token-texts]
               (highlight text))))
 
-        ;; TODO update reusult panel
-        ;; TODO update locals panel
+        ;; update reusult panel
+        (update-result-pane flow-id thread-id (:result to-trace))
+
+        ;; update locals panel
+        (update-locals-pane flow-id thread-id (state/bindings-for-trace state flow-id thread-id new-trace-idx))
+
         ;; TODO update form clickable tokens
 
         (swap! state/*state state/set-thread-curr-trace-idx flow-id thread-id new-trace-idx)))))
@@ -151,7 +210,7 @@
 (defn add-form [flow-id thread-id form-id form-ns print-tokens]
   (run-now
    (let [text-font (Font/font "monospaced" 14)
-         [forms-box] (obj-lookup flow-id (format "forms_box_%d" thread-id))
+         [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
          tokens-texts (->> print-tokens
                            (map (fn [tok]
                                   (let [text (Text.
