@@ -1,5 +1,6 @@
 (ns flow-storm.debugger.state
   (:require [clojure.spec.alpha :as s]
+            [flow-storm.debugger.callstack-tree :as callstack-tree]
             [flow-storm.tracer])
   (:import [flow_storm.tracer InitTrace BindTrace FnCallTrace ExecTrace]))
 
@@ -31,10 +32,12 @@
 
 (s/def :thread/bind-traces (s/coll-of ::bind-trace :kind vector?))
 
+(s/def :thread/callstack-tree any?) ;; TODO: finish this
+
 (s/def ::thread (s/keys :req [:thread/id
                               :thread/forms
                               :thread/execution
-                              :thread/bind-traces]))
+                              :thread/callstack-tree]))
 
 (s/def :flow/threads (s/map-of :thread/id ::thread))
 
@@ -104,17 +107,40 @@
    :thread/forms {}
    :thread/execution {:thread/traces []
                       :thread/curr-trace-idx nil}
-   :thread/bind-traces []})
+   :thread/callstack-tree nil})
+
+(defn next-trace-idx [state flow-id thread-id]
+  (-> state
+      (get-in [:flows flow-id :flow/threads thread-id :thread/execution :thread/traces])
+      count))
+
+(defn add-execution-trace* [thread-execution trace]
+  (-> thread-execution
+      (update :thread/traces conj trace)
+      (update :thread/curr-trace-idx #(or % 0))))
 
 (defn add-execution-trace [state {:keys [flow-id thread-id] :as trace}]
-  (update-in state [:flows flow-id :flow/threads thread-id :thread/execution]
-             (fn [execution]
-               (-> execution
-                   (update :thread/traces conj trace)
-                   (update :thread/curr-trace-idx #(or % 0))))))
+  (let [next-idx (next-trace-idx state flow-id thread-id)]
+    (update-in state [:flows flow-id :flow/threads thread-id]
+              (fn [thread]
+                (-> thread
+                    (update :thread/callstack-tree callstack-tree/process-exec-trace next-idx trace)
+                    (update :thread/execution add-execution-trace* trace))))))
+
+(defn add-fn-call-trace [state {:keys [flow-id thread-id] :as trace}]
+  (let [next-idx (next-trace-idx state flow-id thread-id)]
+    (update-in state [:flows flow-id :flow/threads thread-id]
+               (fn [thread]
+                 (-> thread
+                     (update :thread/callstack-tree (fn [cs-tree]
+                                                      (if (zero? next-idx)
+                                                        (callstack-tree/make-call-tree trace)
+                                                        (callstack-tree/process-fn-call-trace cs-tree next-idx trace))))
+                     (update :thread/execution add-execution-trace* trace))))))
 
 (defn add-bind-trace [state {:keys [flow-id thread-id] :as trace}]
-  (update-in state [:flows flow-id :flow/threads thread-id :thread/bind-traces] conj trace))
+  (update-in state [:flows flow-id :flow/threads thread-id :thread/callstack-tree]
+             callstack-tree/pricess-bind-trace trace))
 
 (defn thread-curr-trace-idx [state flow-id thread-id]
   (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx]))
@@ -129,6 +155,16 @@
   (-> state
       (get-in [:flows flow-id :flow/threads thread-id :thread/execution :thread/traces])
       count))
+
+(defn thread-callstack-tree [state flow-id thread-id]
+  (-> state
+      (get-in [:flows flow-id :flow/threads thread-id :thread/callstack-tree])
+      (callstack-tree/callstack-tree)))
+
+(defn thread-find-frame [state flow-id thread-id trace-idx]
+  (-> state
+      (get-in [:flows flow-id :flow/threads thread-id :thread/callstack-tree])
+      (callstack-tree/find-frame trace-idx)))
 
 ;;;;;;;;;;;
 ;; Forms ;;

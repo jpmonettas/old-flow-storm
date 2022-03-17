@@ -6,15 +6,6 @@
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.pprint :as pp]))
 
-(add-tap (bound-fn* pp/pprint))
-
-(Thread/setDefaultUncaughtExceptionHandler
-   (reify
-     Thread$UncaughtExceptionHandler
-     (uncaughtException [this thread throwable]
-       (tap> (str "Unhandled exception " thread throwable))
-       (tap> throwable))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Some testing code ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -54,3 +45,12 @@
 
   ;; reload all namespaces
   (refresh :after 'dev/start-and-add-data))
+
+(add-tap (bound-fn* pp/pprint))
+
+(Thread/setDefaultUncaughtExceptionHandler
+   (reify
+     Thread$UncaughtExceptionHandler
+     (uncaughtException [this thread throwable]
+       (tap> (str "Unhandled exception " thread throwable))
+       (tap> throwable))))

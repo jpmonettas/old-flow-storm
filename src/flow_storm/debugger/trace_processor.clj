@@ -43,7 +43,7 @@
 
   FnCallTrace
   (process [trace]
-    (swap! state/*state state/add-execution-trace trace))
+    (swap! state/*state state/add-fn-call-trace trace))
 
   BindTrace
   (process [trace]

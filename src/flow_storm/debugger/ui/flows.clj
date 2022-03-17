@@ -69,8 +69,10 @@
             to-trace (state/thread-trace @state/*state flow-id thread-id new-trace-idx)
             [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
 
+        ;; update thread current trace lable
         (.setText curr_trace_lbl (str new-trace-idx))
 
+        ;; highlight executing tokens
         (when (state/exec-trace? from-trace)
           (let [from-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                               (:form-id from-trace)
@@ -78,6 +80,7 @@
             (doseq [text from-token-texts]
               (un-highlight text))))
 
+        ;; unhighlight executing tokens
         (when (state/exec-trace? to-trace)
           (let [to-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                             (:form-id to-trace)
@@ -85,6 +88,10 @@
 
             (doseq [text to-token-texts]
               (highlight text))))
+
+        ;; TODO update reusult panel
+        ;; TODO update locals panel
+        ;; TODO update form clickable tokens
 
         (swap! state/*state state/set-thread-curr-trace-idx flow-id thread-id new-trace-idx)))))
 
@@ -143,7 +150,8 @@
 
 (defn add-form [flow-id thread-id form-id form-ns print-tokens]
   (run-now
-   (let [[forms-box] (obj-lookup flow-id (format "forms_box_%d" thread-id))
+   (let [text-font (Font/font "monospaced" 14)
+         [forms-box] (obj-lookup flow-id (format "forms_box_%d" thread-id))
          tokens-texts (->> print-tokens
                            (map (fn [tok]
                                   (let [text (Text.
@@ -152,6 +160,7 @@
                                                 :sp   " "
                                                 (first tok)))
                                         coord (when (vector? tok) (second tok))]
+                                    (.setFont text text-font)
                                     (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
                                     text))))
          ns-label (doto (Label. (format "ns: %s" form-ns))
