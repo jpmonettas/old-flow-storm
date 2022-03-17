@@ -20,7 +20,6 @@
    :fn-ns fn-ns
    :args args-vec
    :timestamp timestamp
-   :expr-traces []
    :form-id form-id
    :bindings {}
    :calls []})
@@ -42,7 +41,7 @@
                               zip/down)))
         (update :trace-idx->frame assoc trace-idx frame))))
 
-(defn pricess-bind-trace [callstack-tree {:keys [symbol value]}]
+(defn process-bind-trace [callstack-tree {:keys [symbol value]}]
   (-> callstack-tree
       (update :zipper (fn [z]
                         (-> z
@@ -50,23 +49,21 @@
                                         (update node :bindings assoc symbol value))))))))
 
 (defn process-exec-trace [callstack-tree trace-idx {:keys [result outer-form?] :as trace}]
-  (-> callstack-tree
-      ;; IMPORTANT the order here matters
-      (update :trace-idx->frame assoc trace-idx (zip/node (:zipper callstack-tree)))
-      (update :zipper (fn [z]
-                        ;; alway add the trace to :expr-traces
-                        ;; if it is outer-form? then set :ret and move up (return)
-                        ;; unless you are already at the root
-                        (let [z' (-> z
-                                     (zip/edit (fn [node]
-                                                 (cond-> node
-                                                   true        (update :expr-traces conj trace)
-                                                   outer-form? (assoc :ret result)))))]
-                          (if outer-form?
-                            (if-let [up (zip/up z')]
-                              up
-                              z')
-                            z'))))))
+  (let [callstack-tree-1 (update callstack-tree :zipper
+                                 (fn [z]
+                                   (-> z
+                                       (zip/edit (fn [node]
+                                                   (cond-> node
+                                                     outer-form? (assoc :ret result)))))))
+        callstack-tree-2 (update callstack-tree-1 :trace-idx->frame assoc trace-idx (zip/node (:zipper callstack-tree-1)))
+        callstack-tree-3 (update callstack-tree-2 :zipper
+                                 (fn [z]
+                                   (if outer-form?
+                                     (if-let [up (zip/up z)]
+                                       up
+                                       z)
+                                     z)))]
+    callstack-tree-3))
 
 (defn callstack-tree [{:keys [zipper]}]
   (zip/root zipper))

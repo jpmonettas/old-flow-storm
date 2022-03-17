@@ -18,7 +18,9 @@
 (s/def :form/ns string?)
 (s/def :form/form any?)
 
-(s/def :thread/form (s/keys :req [:form/id :form/ns :form/form]))
+(s/def :thread/form (s/keys :req [:form/id
+                                  :form/ns
+                                  :form/form]))
 (s/def :thread/forms (s/map-of :form/id :thread/form))
 
 (s/def :thread/exec-trace (s/or :fn-call ::fn-call-trace :expr ::exec-trace))
@@ -34,10 +36,13 @@
 
 (s/def :thread/callstack-tree any?) ;; TODO: finish this
 
+(s/def :thread/forms-hot-traces (s/map-of :form/id (s/coll-of ::exec-trace)))
+
 (s/def ::thread (s/keys :req [:thread/id
                               :thread/forms
                               :thread/execution
-                              :thread/callstack-tree]))
+                              :thread/callstack-tree
+                              :thread/forms-hot-traces]))
 
 (s/def :flow/threads (s/map-of :thread/id ::thread))
 
@@ -107,7 +112,8 @@
    :thread/forms {}
    :thread/execution {:thread/traces []
                       :thread/curr-trace-idx nil}
-   :thread/callstack-tree nil})
+   :thread/callstack-tree nil
+   :thread/forms-hot-traces {}})
 
 (defn next-trace-idx [state flow-id thread-id]
   (-> state
@@ -119,13 +125,14 @@
       (update :thread/traces conj trace)
       (update :thread/curr-trace-idx #(or % 0))))
 
-(defn add-execution-trace [state {:keys [flow-id thread-id] :as trace}]
+(defn add-execution-trace [state {:keys [flow-id thread-id form-id] :as trace}]
   (let [next-idx (next-trace-idx state flow-id thread-id)]
     (update-in state [:flows flow-id :flow/threads thread-id]
               (fn [thread]
                 (-> thread
                     (update :thread/callstack-tree callstack-tree/process-exec-trace next-idx trace)
-                    (update :thread/execution add-execution-trace* trace))))))
+                    (update :thread/execution add-execution-trace* trace)
+                    (update-in [:thread/forms-hot-traces form-id] conj trace))))))
 
 (defn add-fn-call-trace [state {:keys [flow-id thread-id] :as trace}]
   (let [next-idx (next-trace-idx state flow-id thread-id)]
@@ -140,7 +147,7 @@
 
 (defn add-bind-trace [state {:keys [flow-id thread-id] :as trace}]
   (update-in state [:flows flow-id :flow/threads thread-id :thread/callstack-tree]
-             callstack-tree/pricess-bind-trace trace))
+             callstack-tree/process-bind-trace trace))
 
 (defn thread-curr-trace-idx [state flow-id thread-id]
   (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx]))
@@ -169,6 +176,9 @@
 (defn bindings-for-trace [state flow-id thread-id trace-idx]
   (-> (thread-find-frame state flow-id thread-id trace-idx)
       :bindings))
+
+(defn interesting-expr-traces [state flow-id thread-id form-id]
+  (get-in state [:flows flow-id :flow/threads thread-id :thread/forms-hot-traces form-id]))
 
 ;;;;;;;;;;;
 ;; Forms ;;

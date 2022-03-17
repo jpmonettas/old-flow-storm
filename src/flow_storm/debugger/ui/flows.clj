@@ -107,9 +107,13 @@
 (defn- create-call-stack-tree-pane []
   (Label. "Call stack tree"))
 
-(defn- highlight [token-text]
+(defn- highlight-executing [token-text]
   (doto token-text
     (.setFill (Color/RED))))
+
+(defn- highlight-interesting [token-text]
+  (doto token-text
+    (.setFill (Color/GREEN))))
 
 (defn- un-highlight [token-text]
   (doto token-text
@@ -121,36 +125,42 @@
     (when (<= 0 new-trace-idx (dec trace-count))
       (let [curr-idx (state/thread-curr-trace-idx state flow-id thread-id)
             from-trace (state/thread-trace state flow-id thread-id curr-idx)
+            prev-form-id (:form-id from-trace)
             to-trace (state/thread-trace state flow-id thread-id new-trace-idx)
+            next-form-id (:form-id to-trace)
             [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
 
         ;; update thread current trace lable
         (.setText curr_trace_lbl (str new-trace-idx))
 
-        ;; highlight executing tokens
-        (when (state/exec-trace? from-trace)
-          (let [from-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
-                                                                              (:form-id from-trace)
-                                                                              (:coor from-trace)))]
-            (doseq [text from-token-texts]
-              (un-highlight text))))
+        (when (not= prev-form-id next-form-id)
+          ;; we are leaving a form with this jump, so unhighlight all prev-form interesting tokens
+          (let [prev-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id prev-form-id)]
+            (doseq [{:keys [coor]} prev-form-interesting-expr-traces]
+              (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id prev-form-id coor))]
+                (doseq [text token-texts]
+                  (un-highlight text))))))
 
-        ;; unhighlight executing tokens
+        ;; highlight all interesting tokens for the form we are currently in
+        (let [interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id next-form-id)]
+          (doseq [{:keys [coor]} interesting-expr-traces]
+            (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id next-form-id coor))]
+              (doseq [text token-texts]
+                (highlight-interesting text)))))
+
+        ;; highlight executing tokens
         (when (state/exec-trace? to-trace)
           (let [to-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
-                                                                            (:form-id to-trace)
-                                                                            (:coor to-trace)))]
-
+                                                                             (:form-id to-trace)
+                                                                             (:coor to-trace)))]
             (doseq [text to-token-texts]
-              (highlight text))))
+              (highlight-executing text))))
 
         ;; update reusult panel
         (update-result-pane flow-id thread-id (:result to-trace))
 
         ;; update locals panel
         (update-locals-pane flow-id thread-id (state/bindings-for-trace state flow-id thread-id new-trace-idx))
-
-        ;; TODO update form clickable tokens
 
         (swap! state/*state state/set-thread-curr-trace-idx flow-id thread-id new-trace-idx)))))
 
