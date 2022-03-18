@@ -134,12 +134,11 @@
         cell-factory (proxy [javafx.util.Callback] []
                        (call [tv]
                          (proxy [TreeCell] []
-                           (updateItem [thing empty?]
-                             (proxy-super updateItem thing empty?)
+                           (updateItem [item empty?]
+                             (proxy-super updateItem item empty?)
                              (if empty?
-                               (.setText this nil)
-                               (.setText this thing)
-                               #_(.setGraphic this (Label. (str "HEREEEE " thing))))))))
+                               (.setGraphic this nil)
+                               (.setGraphic this (Label. (str item))))))))
         tree-view (doto (TreeView.)
                     (.setEditable false)
                     (.setCellFactory cell-factory))]
@@ -247,10 +246,15 @@
 (defn- create-thread-controls-pane [flow-id thread-id]
   (let [prev-btn (doto (Button. "<")
                    (.setOnAction (event-handler
-                                  [_]
-                                  )))
+                                  [ev]
+                                  (jump-to-coord flow-id
+                                                 thread-id
+                                                 (dec (state/thread-curr-trace-idx @state/*state flow-id thread-id))))))
         curr-trace-lbl (Label. "0")
+        separator-lbl (Label. "/")
+        thread-trace-count-lbl (Label. "-")
         _ (store-obj flow-id (state-vars/thread-curr-trace-lbl-id thread-id) curr-trace-lbl)
+        _ (store-obj flow-id (state-vars/thread-trace-count-lbl-id thread-id) thread-trace-count-lbl)
         next-btn (doto (Button. ">")
                    (.setOnAction (event-handler
                                   [ev]
@@ -258,8 +262,13 @@
                                                  thread-id
                                                  (inc (state/thread-curr-trace-idx @state/*state flow-id thread-id))))))]
 
-    (doto (HBox. (into-array Node [prev-btn curr-trace-lbl next-btn]))
+    (doto (HBox. (into-array Node [prev-btn curr-trace-lbl separator-lbl thread-trace-count-lbl next-btn]))
       (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;"))))
+
+(defn update-thread-trace-count-lbl [flow-id thread-id cnt]
+  (run-later
+   (let [[lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
+     (.setText lbl (str cnt)))))
 
 (defn- create-thread-pane [flow-id thread-id]
   (let [thread-pane (VBox.)

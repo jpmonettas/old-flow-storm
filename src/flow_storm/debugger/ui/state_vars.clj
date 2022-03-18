@@ -59,6 +59,9 @@
 (defn thread-curr-trace-lbl-id [thread-id]
   (format "thread_curr_trace_lbl_%d" thread-id))
 
+(defn thread-trace-count-lbl-id [thread-id]
+  (format "thread_trace_count_lbl_%d" thread-id))
+
 (defn thread-forms-box-id [thread-id]
   (format "forms_box_%d" thread-id))
 

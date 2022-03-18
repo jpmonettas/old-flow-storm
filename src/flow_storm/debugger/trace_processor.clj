@@ -38,12 +38,20 @@
       (ui-flows/add-form flow-id thread-id form-id ns form-ptokens)))
 
   ExecTrace
-  (process [trace]
-    (swap! state/*state state/add-execution-trace trace))
+  (process [{:keys [flow-id thread-id] :as trace}]
+    (swap! state/*state state/add-execution-trace trace)
+    (ui-flows/update-thread-trace-count-lbl
+     flow-id
+     thread-id
+     (state/thread-trace-count @state/*state flow-id thread-id)))
 
   FnCallTrace
-  (process [trace]
-    (swap! state/*state state/add-fn-call-trace trace))
+  (process [{:keys [flow-id thread-id] :as trace}]
+    (swap! state/*state state/add-fn-call-trace trace)
+    (ui-flows/update-thread-trace-count-lbl
+     flow-id
+     thread-id
+     (state/thread-trace-count @state/*state flow-id thread-id)))
 
   BindTrace
   (process [trace]

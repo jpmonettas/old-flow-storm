@@ -152,6 +152,9 @@
 (defn thread-curr-trace-idx [state flow-id thread-id]
   (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx]))
 
+(defn thread-trace-count [state flow-id thread-id]
+  (count (get-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/traces])))
+
 (defn set-thread-curr-trace-idx [state flow-id thread-id idx]
   (assoc-in state [:flows flow-id :flow/threads thread-id :thread/execution :thread/curr-trace-idx] idx))
 
