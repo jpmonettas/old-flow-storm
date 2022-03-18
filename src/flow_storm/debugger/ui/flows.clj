@@ -4,7 +4,7 @@
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button Label ListView ListCell TextArea Tab TabPane TabPane$TabClosingPolicy SplitPane]
+           [javafx.scene.control Button Label ListView ListCell TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
@@ -106,8 +106,46 @@
         (.addAll [forms-pane locals-result-pane]))
     left-right-pane))
 
-(defn- create-call-stack-tree-pane []
-  (Label. "Call stack tree"))
+(defn- update-call-stack-tree-pane [flow-id thread-id]
+  (let [lazy-tree-item (fn lazy-tree-item [frame]
+                         (let [;; TODO: get :ret here from the mut-ref
+                               {:keys [fn-name fn-ns args calls]} frame
+                               node-text (format "(%s/%s %s)" fn-ns fn-name (pr-str args))]
+                           (proxy [TreeItem] [node-text]
+                             (getChildren []
+                               (if (.isEmpty (proxy-super getChildren))
+                                 (let [new-children (into-array
+                                                     TreeItem
+                                                     (map lazy-tree-item calls))]
+                                   (.setAll (proxy-super getChildren) new-children)
+                                   (proxy-super getChildren))
+                                 (proxy-super getChildren)))
+                             (isLeaf [] (empty? calls)))))
+        root-item (lazy-tree-item (state/thread-callstack-tree @state/*state flow-id thread-id))
+        [tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))]
+
+    (.setRoot tree-view root-item)))
+
+(defn- create-call-stack-tree-pane [flow-id thread-id]
+  (let [update-btn (doto (Button. "Update")
+                     (.setOnAction (event-handler
+                                    [_]
+                                    (update-call-stack-tree-pane flow-id thread-id))))
+        cell-factory (proxy [javafx.util.Callback] []
+                       (call [tv]
+                         (proxy [TreeCell] []
+                           (updateItem [thing empty?]
+                             (proxy-super updateItem thing empty?)
+                             (if empty?
+                               (.setText this nil)
+                               (.setText this thing)
+                               #_(.setGraphic this (Label. (str "HEREEEE " thing))))))))
+        tree-view (doto (TreeView.)
+                    (.setEditable false)
+                    (.setCellFactory cell-factory))]
+    (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
+    (VBox. (into-array Node [update-btn tree-view]))))
+
 
 (defn- highlight-executing [token-text]
   (doto token-text
@@ -232,7 +270,7 @@
         code-tab (doto (Tab. "Code")
                    (.setContent (create-code-pane flow-id thread-id)))
         callstack-tree-tab (doto (Tab. "Call stack")
-                             (.setContent (create-call-stack-tree-pane)))]
+                             (.setContent (create-call-stack-tree-pane flow-id thread-id)))]
 
     ;; make thread-tools-tab-pane take the full height
     (-> thread-tools-tab-pane

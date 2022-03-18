@@ -1,20 +1,6 @@
 (ns flow-storm.debugger.callstack-tree
   (:require [clojure.zip :as zip]))
 
-#_{:calstack-tree [{:fn org.some/fun
-                  :args [...]
-                  :ret 5
-                  :bindings [BindTrace{}, BindTrace{}, ...]
-                  :calls [{:fn org.some/other-fun
-                           :args [...]
-                           :ret 3
-                           :bindings [BindTrace{}, BindTrace{}, ...]
-                           :calls []
-                           }
-                          ...]
-                  }]
-   :curr-path [0 ]}
-
 (defn- make-tree-node [{:keys [form-id fn-name fn-ns args-vec timestamp]}]
   {:fn-name fn-name
    :fn-ns fn-ns

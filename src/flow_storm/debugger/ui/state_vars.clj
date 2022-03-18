@@ -67,3 +67,6 @@
 
 (defn thread-locals-list-id [thread-id]
   (format "locals_list_%d" thread-id))
+
+(defn thread-callstack-tree-view-id [thread-id]
+  (format "callstack_tree_view_%s" thread-id))

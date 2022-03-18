@@ -9,12 +9,12 @@
         org.java-websocket/Java-WebSocket {:mvn/version "1.5.2"}
         org.clojure/tools.namespace {:mvn/version "1.2.0"}
 
-        org.openjfx/javafx-controls {:mvn/version "19-ea+3"}
-        org.openjfx/javafx-base {:mvn/version "19-ea+3"}
-        org.openjfx/javafx-graphics {:mvn/version "19-ea+3"}
-        org.openjfx/javafx-media {:mvn/version "19-ea+3"}
-        org.openjfx/javafx-web {:mvn/version "19-ea+3"}
-        org.openjfx/javafx-swing {:mvn/version "19-ea+3"}
+        org.openjfx/javafx-controls {:mvn/version "18"}
+        org.openjfx/javafx-base {:mvn/version "18"}
+        org.openjfx/javafx-graphics {:mvn/version "18"}
+        org.openjfx/javafx-media {:mvn/version "18"}
+        org.openjfx/javafx-web {:mvn/version "18"}
+        org.openjfx/javafx-swing {:mvn/version "18"}
 
         }
 
