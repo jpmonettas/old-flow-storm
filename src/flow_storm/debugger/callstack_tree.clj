@@ -37,8 +37,9 @@
     (-> callstack-tree
         (update :zipper (fn [z]
                           (-> z
-                              (zip/insert-child frame)
-                              zip/down)))
+                              (zip/append-child frame)
+                              zip/down
+                              zip/rightmost)))
         (update :trace-idx->frame assoc trace-idx frame))))
 
 (defn process-bind-trace [callstack-tree {:keys [symbol value]}]
