@@ -62,7 +62,7 @@
                     (.setBottom (trace-counter-box)))]
 
 
-    (let [ctx-menu (ui-utils/make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
+    #_(let [ctx-menu (ui-utils/make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
                                                 {:text "Quit" :on-click  #(close-stage)}])]
       (.setOnContextMenuRequested mp
                                   (event-handler

@@ -18,6 +18,8 @@
 (defn- make-tree-node [{:keys [form-id fn-name fn-ns args-vec timestamp]}]
   {:fn-name fn-name
    :fn-ns fn-ns
+   :frame-mut-data-ref (atom {:min-trace-idx Long/MAX_VALUE
+                              :max-trace-idx 0})
    :args args-vec
    :timestamp timestamp
    :form-id form-id
@@ -36,6 +38,11 @@
   (let [frame (make-tree-node fn-call-trace)]
     (-> callstack-tree
         (update :zipper (fn [z]
+                          (swap! (-> z zip/node :frame-mut-data-ref)
+                                 (fn [data]
+                                   (-> data
+                                       (update :min-trace-idx min trace-idx)
+                                       (update :max-trace-idx max trace-idx))))
                           (-> z
                               (zip/append-child frame)
                               zip/down
@@ -52,10 +59,13 @@
 (defn process-exec-trace [callstack-tree trace-idx {:keys [result outer-form?] :as trace}]
   (let [callstack-tree-1 (update callstack-tree :zipper
                                  (fn [z]
-                                   (-> z
-                                       (zip/edit (fn [node]
-                                                   (cond-> node
-                                                     outer-form? (assoc :ret result)))))))
+                                   (swap! (-> z zip/node :frame-mut-data-ref)
+                                          (fn [data]
+                                            (cond-> data
+                                              true        (update :min-trace-idx min trace-idx)
+                                              true        (update :max-trace-idx max trace-idx)
+                                              outer-form? (assoc :ret result))))
+                                   z))
         callstack-tree-2 (update callstack-tree-1 :trace-idx->frame assoc trace-idx (zip/node (:zipper callstack-tree-1)))
         callstack-tree-3 (update callstack-tree-2 :zipper
                                  (fn [z]

@@ -178,7 +178,12 @@
       :bindings))
 
 (defn interesting-expr-traces [state flow-id thread-id form-id curr-trace-idx]
-  (get-in state [:flows flow-id :flow/threads thread-id :thread/forms-hot-traces form-id]))
+  (let [frame-hot-traces (get-in state [:flows flow-id :flow/threads thread-id :thread/forms-hot-traces form-id])
+        trace-frame (thread-find-frame state flow-id thread-id curr-trace-idx)
+        {:keys [min-trace-idx max-trace-idx]} @(:frame-mut-data-ref trace-frame)]
+    (->> frame-hot-traces
+         (filter (fn [t]
+                    (<= min-trace-idx (:trace-idx (meta t)) max-trace-idx))))))
 
 ;;;;;;;;;;;
 ;; Forms ;;
