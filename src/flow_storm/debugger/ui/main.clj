@@ -37,14 +37,19 @@
         taps-tab (doto (Tab. "Taps")
                    (.setContent (Label. "Taps comming soon")))
         timeline-tab (doto (Tab. "Timeline")
-                       (.setContent (Label. "Timeline comming soon")))]
+                       (.setContent (Label. "Timeline comming soon")))
+        browser-tab (doto (Tab. "Browser")
+                       (.setContent (Label. "Browser comming soon")))
+        docs-tab (doto (Tab. "Docs")
+                       (.setContent (Label. "Docs comming soon")))]
     (doto tabs-p
       (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE)
 
       (.setRotateGraphic true)
       (.setSide (Side/LEFT)))
 
-    (.addAll tabs [flows-tab refs-tab taps-tab timeline-tab])
+    (.addAll tabs [flows-tab refs-tab taps-tab
+                   timeline-tab browser-tab docs-tab])
 
     tabs-p))
 
