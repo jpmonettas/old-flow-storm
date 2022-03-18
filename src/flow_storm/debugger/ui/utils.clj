@@ -1,4 +1,5 @@
-(ns flow-storm.debugger.ui.utils)
+(ns flow-storm.debugger.ui.utils
+  (:import [javafx.scene.control ContextMenu MenuItem]))
 
 (defn run-later*
   [f]
@@ -35,3 +36,14 @@
 
 (defmacro event-handler [arg & body]
   `(event-handler* (fn ~arg ~@body)))
+
+(defn make-context-menu [items]
+  (let [cm (ContextMenu.)
+        cm-items (->> items
+                      (map (fn [{:keys [text on-click]}]
+                             (doto (MenuItem. text)
+                               (.setOnAction (event-handler [_] (on-click)))))))]
+    (-> cm
+        .getItems
+        (.addAll (into-array MenuItem cm-items)))
+    cm))

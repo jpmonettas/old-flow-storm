@@ -36,7 +36,7 @@
 
 (s/def :thread/callstack-tree any?) ;; TODO: finish this
 
-(s/def :thread/forms-hot-traces (s/map-of :form/id (s/coll-of ::exec-trace)))
+(s/def :thread/forms-hot-traces (s/map-of :form/id (s/coll-of ::exec-trace :kind vector?)))
 
 (s/def ::thread (s/keys :req [:thread/id
                               :thread/forms
@@ -132,7 +132,7 @@
                 (-> thread
                     (update :thread/callstack-tree callstack-tree/process-exec-trace next-idx trace)
                     (update :thread/execution add-execution-trace* trace)
-                    (update-in [:thread/forms-hot-traces form-id] conj trace))))))
+                    (update-in [:thread/forms-hot-traces form-id] (fnil conj []) (with-meta trace {:trace-idx next-idx})))))))
 
 (defn add-fn-call-trace [state {:keys [flow-id thread-id] :as trace}]
   (let [next-idx (next-trace-idx state flow-id thread-id)]
@@ -177,7 +177,7 @@
   (-> (thread-find-frame state flow-id thread-id trace-idx)
       :bindings))
 
-(defn interesting-expr-traces [state flow-id thread-id form-id]
+(defn interesting-expr-traces [state flow-id thread-id form-id curr-trace-idx]
   (get-in state [:flows flow-id :flow/threads thread-id :thread/forms-hot-traces form-id]))
 
 ;;;;;;;;;;;

@@ -17,17 +17,6 @@
    (-> (first (obj-lookup "trace_count_label"))
        (.setText (str cnt)))))
 
-(defn make-context-menu [items]
-  (let [cm (ContextMenu.)
-        cm-items (->> items
-                      (map (fn [{:keys [text on-click]}]
-                             (doto (MenuItem. text)
-                               (.setOnAction (event-handler [_] (on-click)))))))]
-    (-> cm
-        .getItems
-        (.addAll (into-array MenuItem cm-items)))
-    cm))
-
 (defn trace-counter-box []
   (let [box (HBox.) ; spacing
         trace-cnt-label (Label. "0")]
@@ -73,8 +62,8 @@
                     (.setBottom (trace-counter-box)))]
 
 
-    (let [ctx-menu (make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
-                                       {:text "Quit" :on-click  #(close-stage)}])]
+    (let [ctx-menu (ui-utils/make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
+                                                {:text "Quit" :on-click  #(close-stage)}])]
       (.setOnContextMenuRequested mp
                                   (event-handler
                                    [ev]

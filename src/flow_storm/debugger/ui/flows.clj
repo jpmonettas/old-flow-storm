@@ -3,13 +3,19 @@
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now]]
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state])
-  (:import [javafx.scene.layout BorderPane GridPane HBox Priority Pane VBox]
+  (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
            [javafx.scene.control Button Label ListView ListCell TextArea Tab TabPane TabPane$TabClosingPolicy SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
-           [javafx.geometry Side Orientation Pos]
+           [javafx.geometry Insets Side Orientation Pos]
            [javafx.collections FXCollections]))
+
+(declare jump-to-coord)
+
+(defn- format-value-short [v]
+  (let [s (pr-str v)]
+    (subs s 0 (min 80 (count s)))))
 
 (defn create-empty-flow [flow-id]
   (run-now
@@ -58,10 +64,6 @@
 
     tools-tab-pane))
 
-(defn- format-local-val [v]
-  (let [s (pr-str v)]
-    (subs s 0 (min 80 (count s)))))
-
 (defn- create-locals-pane [flow-id thread-id]
   (let [observable-bindings-list (FXCollections/observableArrayList)
         cell-factory (proxy [javafx.util.Callback] []
@@ -73,7 +75,7 @@
                                (.setText this nil)
                                (let [symb-lbl (doto (Label. (first symb-val))
                                                 (.setPrefWidth 100))
-                                     val-lbl (Label.  (format-local-val (second symb-val)))
+                                     val-lbl (Label.  (format-value-short (second symb-val)))
                                      hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
                                  (.setGraphic this hbox)))))))
         locals-list-view (doto (ListView. observable-bindings-list)
@@ -113,11 +115,35 @@
 
 (defn- highlight-interesting [token-text]
   (doto token-text
-    (.setFill (Color/GREEN))))
+    (.setFill (Color/web "#2f47e0"))))
+
+(defn- arm-interesting [token-text traces]
+  (let [{:keys [flow-id thread-id]} (first traces)]
+    (.setStyle token-text "-fx-cursor: hand;")
+
+    (if (> (count traces) 1)
+      (let [ctx-menu-options (->> traces
+                              (map (fn [t]
+                                     (let [tidx (-> t meta :trace-idx)]
+                                       {:text (format "%d | %s" tidx (format-value-short (:result t)))
+                                        :on-click #(jump-to-coord flow-id thread-id tidx)}))))
+            ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
+        (.setOnMouseClicked token-text (event-handler
+                                        [ev]
+                                        (.show ctx-menu
+                                               token-text
+                                               (.getScreenX ev)
+                                               (.getScreenY ev)))))
+
+      (.setOnMouseClicked token-text (event-handler
+                                      [ev]
+                                      (jump-to-coord flow-id thread-id (-> traces first meta :trace-idx)))))))
 
 (defn- un-highlight [token-text]
   (doto token-text
-    (.setFill (Color/BLACK))))
+    (.setFill (Color/BLACK))
+    (.setStyle "-fx-cursor: pointer;")
+    (.setOnMouseClicked (event-handler [_]))))
 
 (defn- jump-to-coord [flow-id thread-id new-trace-idx]
   (let [state @state/*state
@@ -135,18 +161,34 @@
 
         (when (not= prev-form-id next-form-id)
           ;; we are leaving a form with this jump, so unhighlight all prev-form interesting tokens
-          (let [prev-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id prev-form-id)]
+          (let [prev-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id prev-form-id curr-idx)]
             (doseq [{:keys [coor]} prev-form-interesting-expr-traces]
               (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id prev-form-id coor))]
                 (doseq [text token-texts]
                   (un-highlight text))))))
 
-        ;; highlight all interesting tokens for the form we are currently in
-        (let [interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id next-form-id)]
-          (doseq [{:keys [coor]} interesting-expr-traces]
-            (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id next-form-id coor))]
-              (doseq [text token-texts]
-                (highlight-interesting text)))))
+        (when (or (not= prev-form-id next-form-id)
+                  (zero? curr-idx))
+          ;; we are leaving a form with this jump, or its the first trace
+          ;; highlight all interesting tokens for the form we are currently in
+          (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
+                                                  (group-by :coor))]
+            (doseq [[coor traces] interesting-expr-traces-grps]
+              (let [token-id (state-vars/form-token-id thread-id next-form-id coor)
+                    token-texts (obj-lookup flow-id token-id)]
+                (doseq [text token-texts]
+                  (arm-interesting text traces)
+                  (highlight-interesting text))))))
+
+        ;; "unhighlight" prev executing tokens
+        (when (and (state/exec-trace? from-trace))
+          (let [from-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
+                                                                               (:form-id from-trace)
+                                                                               (:coor from-trace)))]
+            (doseq [text from-token-texts]
+              (if (= prev-form-id next-form-id)
+                (highlight-interesting text)
+                (un-highlight text)))))
 
         ;; highlight executing tokens
         (when (state/exec-trace? to-trace)
