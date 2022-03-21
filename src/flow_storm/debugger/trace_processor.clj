@@ -32,7 +32,7 @@
 
     ;; add the form
     (let [new-form (state/create-form form-id ns form)
-          form-ptokens (binding [pp/*print-right-margin* 60]
+          form-ptokens (binding [pp/*print-right-margin* 80]
                          (form-pprinter/pprint-tokens form))]
       (swap! state/*state state/add-form flow-id thread-id new-form)
       (ui-flows/add-form flow-id thread-id form-id ns form-ptokens)))

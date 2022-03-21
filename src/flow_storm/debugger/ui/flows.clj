@@ -4,7 +4,7 @@
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button Label ListView ListCell TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
+           [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
@@ -31,9 +31,11 @@
 
 (defn- create-forms-pane [flow-id thread-id]
   (let [box (doto (VBox.)
-              (.setSpacing 5))]
+              (.setSpacing 5))
+        scroll-pane (ScrollPane.)]
+    (.setContent scroll-pane box)
     (store-obj flow-id (state-vars/thread-forms-box-id thread-id) box)
-    box))
+    scroll-pane))
 
 (defn create-result-pprint-pane [flow-id thread-id]
   (let [result-text-area (doto (TextArea.)
@@ -72,7 +74,7 @@
                            (updateItem [symb-val empty?]
                              (proxy-super updateItem symb-val empty?)
                              (if empty?
-                               (.setText this nil)
+                               (.setGraphic this nil)
                                (let [symb-lbl (doto (Label. (first symb-val))
                                                 (.setPrefWidth 100))
                                      val-lbl (Label.  (format-value-short (second symb-val)))

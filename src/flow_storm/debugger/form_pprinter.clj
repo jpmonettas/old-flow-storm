@@ -40,6 +40,7 @@
                               (keep-indexed (fn [i c] (cond
                                                         (= c \newline) [i :nl]
                                                         (= c \space)   [i :sp]
+                                                        (= c \,)       [i :sp]
                                                         :else nil)))
                               (into {}))
         pre-tokens (form-tokens form)]
