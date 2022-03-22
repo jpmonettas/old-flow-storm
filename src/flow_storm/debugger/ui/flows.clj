@@ -2,7 +2,8 @@
   (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now]]
             [clojure.pprint :as pp]
-            [flow-storm.debugger.state :as state])
+            [flow-storm.debugger.state :as state]
+            [clojure.string :as str])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
            [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
@@ -134,7 +135,7 @@
         args-lbl (Label. (str " " (format-value-short args)))
         node-box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
         ctx-menu-options [{:text "Goto trace"
-                           :on-click #(jump-to-cotord flow-id thread-id call-trace-idx)}]
+                           :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}]
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
     (doto node-box
       (.setOnMouseClicked (event-handler
@@ -170,11 +171,11 @@
 
 (defn- highlight-interesting [token-text]
   (doto token-text
-    (.setFill (Color/web "#2f47e0"))))
+    (.setFill (Color/web "#32a852"))))
 
 (defn- arm-interesting [token-text traces]
   (let [{:keys [flow-id thread-id]} (first traces)]
-    (.setStyle token-text "-fx-cursor: hand;")
+    (.setStyle token-text "-fx-cursor: hand; -fx-font-weight: bold;")
 
     (if (> (count traces) 1)
       (let [ctx-menu-options (->> traces
@@ -209,22 +210,24 @@
             prev-form-id (:form-id from-trace)
             to-trace (state/thread-trace state flow-id thread-id new-trace-idx)
             next-form-id (:form-id to-trace)
-            [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))]
+            [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
+            from-frame (state/thread-find-frame state flow-id thread-id curr-idx)
+            to-frame (state/thread-find-frame state flow-id thread-id new-trace-idx)]
 
         ;; update thread current trace lable
         (.setText curr_trace_lbl (str new-trace-idx))
 
-        (when (not= prev-form-id next-form-id)
-          ;; we are leaving a form with this jump, so unhighlight all prev-form interesting tokens
+        (when (not= from-frame to-frame)
+          ;; we are leaving a frame with this jump, so unhighlight all prev-form interesting tokens
           (let [prev-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id prev-form-id curr-idx)]
             (doseq [{:keys [coor]} prev-form-interesting-expr-traces]
               (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id prev-form-id coor))]
                 (doseq [text token-texts]
                   (un-highlight text))))))
 
-        (when (or (not= prev-form-id next-form-id)
+        (when (or (not= from-frame to-frame)
                   (zero? curr-idx))
-          ;; we are leaving a form with this jump, or its the first trace
+          ;; we are leaving a frame with this jump, or its the first trace
           ;; highlight all interesting tokens for the form we are currently in
           (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
                                                   (group-by :coor))]
