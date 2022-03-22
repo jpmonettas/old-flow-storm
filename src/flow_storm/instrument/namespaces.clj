@@ -6,12 +6,14 @@
             [flow-storm.utils :as utils])
   (:import [java.io PushbackReader]))
 
-(defn all-ns-with-prefix [prefix {:keys [excluding]}]
+(defn all-ns-with-prefixes [prefixes {:keys [excluding]}]
   (->> (all-ns)
        (keep (fn [ns]
                (let [nsname (str (ns-name ns))]
                  (when (and (not (excluding nsname))
-                            (str/starts-with? nsname prefix))
+                            (some (fn [prefix]
+                                    (str/starts-with? nsname prefix))
+                                  prefixes))
                   ns))))))
 
 (defn ns-vars [ns]
@@ -133,8 +135,8 @@
                        :unknown-error (print (utils/colored-string "X" :red)))))))
            (println)))))))
 
-(defn trace-files-for-namespaces [prefix config]
-  (let [ns-set (all-ns-with-prefix prefix {:excluding #{""}})
+(defn trace-files-for-namespaces [prefixes config]
+  (let [ns-set (all-ns-with-prefixes prefixes {:excluding #{""}})
         files-set (interesting-files-for-namespaces ns-set)]
     (doseq [file files-set]
       (trace-file-forms file config))))
