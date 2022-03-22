@@ -15,6 +15,14 @@
 
 (declare jump-to-coord)
 
+(def form-background-normal (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#eee")
+                                                                                      (CornerRadii. 0)
+                                                                                      (Insets. 0))])))
+
+(def form-background-highlighted (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#ffffab")
+                                                                                      (CornerRadii. 0)
+                                                                                      (Insets. 0))])))
+
 (defn- format-value-short [v]
   (let [max-len 80
         s (pr-str v)
@@ -247,9 +255,14 @@
           ;; highlight all interesting tokens for the form we are currently in and also scroll to that form
           (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
                                                   (group-by :coor))
+                [curr-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id curr-form-id))
                 [next-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id next-form-id))
                 [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+
             (ui-utils/center-node-in-scroll-pane thread-scroll-pane next-form-pane)
+
+            (.setBackground curr-form-pane form-background-normal)
+            (.setBackground next-form-pane form-background-highlighted)
             (doseq [[coor traces] interesting-expr-traces-grps]
               (let [token-id (state-vars/form-token-id thread-id next-form-id coor)
                     token-texts (obj-lookup flow-id token-id)]
@@ -349,7 +362,7 @@
 
 (defn add-form [flow-id thread-id form-id form-ns print-tokens]
   (run-now
-   (let [text-font (Font/font "monospaced" 14)
+   (let [text-font (Font/font "monospaced" 13)
          [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
          tokens-texts (->> print-tokens
                            (map (fn [tok]
@@ -369,7 +382,8 @@
                        (.setAlignment (Pos/TOP_RIGHT)))
          form-text-flow (TextFlow. (into-array Text tokens-texts))
          form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
-                          (.setStyle "-fx-padding: 10; -fx-background-color: #eee;"))]
+                     (.setBackground form-background-normal)
+                     (.setStyle "-fx-padding: 10;"))]
      (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
      (-> forms-box
          .getChildren
