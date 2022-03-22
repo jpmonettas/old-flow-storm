@@ -1,5 +1,6 @@
 (ns flow-storm.debugger.ui.utils
-  (:import [javafx.scene.control ContextMenu MenuItem]))
+  (:import [javafx.scene.control ContextMenu MenuItem ScrollPane]
+           [javafx.scene Node]))
 
 (defn run-later*
   [f]
@@ -47,3 +48,13 @@
         .getItems
         (.addAll (into-array MenuItem cm-items)))
     cm))
+
+(defn center-node-in-scroll-pane [^ScrollPane scroll-pane ^Node node]
+  (let [h (-> scroll-pane .getContent .getBoundsInLocal .getHeight)
+        y (/ (+ (-> node .getBoundsInParent .getMaxY)
+                (-> node .getBoundsInParent .getMinY))
+             2.0)
+        v (-> scroll-pane .getViewportBounds .getHeight)]
+    (.setVvalue scroll-pane (* (.getVmax scroll-pane)
+                               (/ (- y (* v 0.5))
+                                  (- h v))))))

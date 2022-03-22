@@ -15,8 +15,11 @@
 (declare jump-to-coord)
 
 (defn- format-value-short [v]
-  (let [s (pr-str v)]
-    (subs s 0 (min 80 (count s)))))
+  (let [max-len 80
+        s (pr-str v)
+        len (count s)]
+    (cond-> (subs s 0 (min max-len len))
+      (> len max-len) (str " ... "))))
 
 (defn create-empty-flow [flow-id]
   (run-now
@@ -36,6 +39,7 @@
         scroll-pane (ScrollPane.)]
     (.setContent scroll-pane box)
     (store-obj flow-id (state-vars/thread-forms-box-id thread-id) box)
+    (store-obj flow-id (state-vars/thread-forms-scroll-id thread-id) scroll-pane)
     scroll-pane))
 
 (defn create-result-pprint-pane [flow-id thread-id]
@@ -228,9 +232,12 @@
         (when (or (not= from-frame to-frame)
                   (zero? curr-idx))
           ;; we are leaving a frame with this jump, or its the first trace
-          ;; highlight all interesting tokens for the form we are currently in
+          ;; highlight all interesting tokens for the form we are currently in and also scroll to that form
           (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
-                                                  (group-by :coor))]
+                                                  (group-by :coor))
+                [next-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id next-form-id))
+                [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+            (ui-utils/center-node-in-scroll-pane thread-scroll-pane next-form-pane)
             (doseq [[coor traces] interesting-expr-traces-grps]
               (let [token-id (state-vars/form-token-id thread-id next-form-id coor)
                     token-texts (obj-lookup flow-id token-id)]
@@ -350,7 +357,7 @@
          form-text-flow (TextFlow. (into-array Text tokens-texts))
          form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
                           (.setStyle "-fx-padding: 10; -fx-background-color: #eee;"))]
-
+     (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
      (-> forms-box
          .getChildren
          (.add 0 form-pane)))))

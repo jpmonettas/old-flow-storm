@@ -65,6 +65,12 @@
 (defn thread-forms-box-id [thread-id]
   (format "forms_box_%d" thread-id))
 
+(defn thread-form-box-id [thread-id form-id]
+  (format "form_box_%d_%d" thread-id form-id))
+
+(defn thread-forms-scroll-id [thread-id]
+  (format "forms_scroll_%d" thread-id))
+
 (defn thread-result-text-area-id [thread-id]
   (format "result_text_area_%d" thread-id))
 
