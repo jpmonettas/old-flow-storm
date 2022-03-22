@@ -111,9 +111,8 @@
 (defn- update-call-stack-tree-pane [flow-id thread-id]
   (let [lazy-tree-item (fn lazy-tree-item [frame]
                          (let [;; TODO: get :ret here from the mut-ref
-                               {:keys [fn-name fn-ns args calls]} frame
-                               node-text (format "(%s/%s %s)" fn-ns fn-name (format-value-short args))]
-                           (proxy [TreeItem] [node-text]
+                               {:keys [calls]} frame]
+                           (proxy [TreeItem] [frame]
                              (getChildren []
                                (if (.isEmpty (proxy-super getChildren))
                                  (let [new-children (into-array
@@ -128,6 +127,23 @@
 
     (.setRoot tree-view root-item)))
 
+(defn- create-call-stack-tree-node [{:keys [call-trace-idx fn-name fn-ns args calls]} flow-id thread-id]
+  (let [ns-lbl (Label. (str fn-ns "/"))
+        fn-name-lbl (doto (Label. fn-name)
+                      (.setStyle "-fx-font-weight: bold;"))
+        args-lbl (Label. (str " " (format-value-short args)))
+        node-box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
+        ctx-menu-options [{:text "Goto trace"
+                           :on-click #(jump-to-cotord flow-id thread-id call-trace-idx)}]
+        ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
+    (doto node-box
+      (.setOnMouseClicked (event-handler
+                           [ev]
+                           (.show ctx-menu
+                                  node-box
+                                  (.getScreenX ev)
+                                  (.getScreenY ev)))))))
+
 (defn- create-call-stack-tree-pane [flow-id thread-id]
   (let [update-btn (doto (Button. "Update")
                      (.setOnAction (event-handler
@@ -136,11 +152,11 @@
         cell-factory (proxy [javafx.util.Callback] []
                        (call [tv]
                          (proxy [TreeCell] []
-                           (updateItem [item empty?]
-                             (proxy-super updateItem item empty?)
+                           (updateItem [frame empty?]
+                             (proxy-super updateItem frame empty?)
                              (if empty?
                                (.setGraphic this nil)
-                               (.setGraphic this (Label. (str item))))))))
+                               (.setGraphic this (create-call-stack-tree-node frame flow-id thread-id)))))))
         tree-view (doto (TreeView.)
                     (.setEditable false)
                     (.setCellFactory cell-factory))]

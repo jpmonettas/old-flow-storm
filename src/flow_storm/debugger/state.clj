@@ -64,13 +64,14 @@
 
 (def *state (atom initial-state
 
-                  :validator (fn [next-state]
-                               (if-not (s/valid? ::state next-state)
-                                 (do
-                                   (tap> (str "STATE Error" (with-out-str (s/explain ::state next-state))))
-                                   false)
+                  ;; :validator (fn [next-state]
+                  ;;              (if-not (s/valid? ::state next-state)
+                  ;;                (do
+                  ;;                  (tap> (str "STATE Error" (with-out-str (s/explain ::state next-state))))
+                  ;;                  false)
 
-                                 true))))
+                  ;;                true))
+                  ))
 
 (defn init-state! []
   (reset! *state initial-state))
@@ -141,7 +142,7 @@
                  (-> thread
                      (update :thread/callstack-tree (fn [cs-tree]
                                                       (if (zero? next-idx)
-                                                        (callstack-tree/make-call-tree trace)
+                                                        (callstack-tree/make-call-tree trace next-idx)
                                                         (callstack-tree/process-fn-call-trace cs-tree next-idx trace))))
                      (update :thread/execution add-execution-trace* trace))))))
 

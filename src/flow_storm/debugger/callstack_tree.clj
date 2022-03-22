@@ -1,8 +1,9 @@
 (ns flow-storm.debugger.callstack-tree
   (:require [clojure.zip :as zip]))
 
-(defn- make-tree-node [{:keys [form-id fn-name fn-ns args-vec timestamp]}]
+(defn- make-tree-node [{:keys [form-id fn-name fn-ns args-vec timestamp]} trace-idx]
   {:fn-name fn-name
+   :call-trace-idx trace-idx
    :fn-ns fn-ns
    :frame-mut-data-ref (atom {:min-trace-idx Long/MAX_VALUE
                               :max-trace-idx 0})
@@ -12,8 +13,8 @@
    :bindings {}
    :calls []})
 
-(defn make-call-tree [fn-call-trace]
-  (let [frame (make-tree-node fn-call-trace)]
+(defn make-call-tree [fn-call-trace trace-idx]
+  (let [frame (make-tree-node fn-call-trace trace-idx)]
     {:zipper (zip/zipper :calls
                          :calls
                          (fn [node children] (assoc node :calls children))
@@ -21,7 +22,7 @@
      :trace-idx->frame {0 frame}}))
 
 (defn process-fn-call-trace [callstack-tree trace-idx fn-call-trace]
-  (let [frame (make-tree-node fn-call-trace)]
+  (let [frame (make-tree-node fn-call-trace trace-idx)]
     (-> callstack-tree
         (update :zipper (fn [z]
                           (swap! (-> z zip/node :frame-mut-data-ref)
@@ -50,7 +51,8 @@
                                             (cond-> data
                                               true        (update :min-trace-idx min trace-idx)
                                               true        (update :max-trace-idx max trace-idx)
-                                              outer-form? (assoc :ret result))))
+                                              outer-form? (assoc :ret result
+                                                                 :ret-trace-idx trace-idx))))
                                    z))
         callstack-tree-2 (update callstack-tree-1 :trace-idx->frame assoc trace-idx (zip/node (:zipper callstack-tree-1)))
         callstack-tree-3 (update callstack-tree-2 :zipper
