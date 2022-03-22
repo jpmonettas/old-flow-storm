@@ -112,7 +112,7 @@
   (let [lazy-tree-item (fn lazy-tree-item [frame]
                          (let [;; TODO: get :ret here from the mut-ref
                                {:keys [fn-name fn-ns args calls]} frame
-                               node-text (format "(%s/%s %s)" fn-ns fn-name (pr-str args))]
+                               node-text (format "(%s/%s %s)" fn-ns fn-name (format-value-short args))]
                            (proxy [TreeItem] [node-text]
                              (getChildren []
                                (if (.isEmpty (proxy-super getChildren))
