@@ -9,6 +9,8 @@
 (s/def :form/id number?)
 (s/def :thread/id number?)
 (s/def :form/coord (s/coll-of number? :kind vector?))
+(s/def :fn/name string?)
+(s/def :fn/ns string?)
 
 (s/def ::init-trace    #(instance? InitTrace %))
 (s/def ::bind-trace    #(instance? BindTrace %))
@@ -38,10 +40,13 @@
 
 (s/def :thread/forms-hot-traces (s/map-of :form/id (s/coll-of ::exec-trace :kind vector?)))
 
+(s/def :callstack-tree/hidden-fn (s/keys :req-un [:fn/name :fn/ns]))
+(s/def :thread/callstack-tree-hidden-fns (s/coll-of :callstack-tree/hidden-fn :kind set?))
 (s/def ::thread (s/keys :req [:thread/id
                               :thread/forms
                               :thread/execution
                               :thread/callstack-tree
+                              :thread/callstack-tree-hidden-fns
                               :thread/forms-hot-traces]))
 
 (s/def :flow/threads (s/map-of :thread/id ::thread))
@@ -114,6 +119,7 @@
    :thread/execution {:thread/traces []
                       :thread/curr-trace-idx nil}
    :thread/callstack-tree nil
+   :thread/callstack-tree-hidden-fns #{}
    :thread/forms-hot-traces {}})
 
 (defn next-trace-idx [state flow-id thread-id]
@@ -188,6 +194,13 @@
     (->> frame-hot-traces
          (filter (fn [t]
                     (<= min-trace-idx (:trace-idx (meta t)) max-trace-idx))))))
+
+(defn callstack-tree-hide-fn [state flow-id thread-id fn-name fn-ns]
+  (update-in state [:flows flow-id :flow/threads thread-id :thread/callstack-tree-hidden-fns] conj {:name fn-name :ns fn-ns}))
+
+(defn callstack-tree-hidden? [state flow-id thread-id fn-name fn-ns]
+  (let [hidden-set (get-in state [:flows flow-id :flow/threads thread-id :thread/callstack-tree-hidden-fns])]
+    (contains? hidden-set {:name fn-name :ns fn-ns})))
 
 ;;;;;;;;;;;
 ;; Forms ;;

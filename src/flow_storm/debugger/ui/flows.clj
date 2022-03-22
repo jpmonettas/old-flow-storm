@@ -114,15 +114,18 @@
     left-right-pane))
 
 (defn- update-call-stack-tree-pane [flow-id thread-id]
-  (let [lazy-tree-item (fn lazy-tree-item [frame]
+  (let [state @state/*state
+        lazy-tree-item (fn lazy-tree-item [frame]
                          (let [;; TODO: get :ret here from the mut-ref
                                {:keys [calls]} frame]
                            (proxy [TreeItem] [frame]
                              (getChildren []
                                (if (.isEmpty (proxy-super getChildren))
-                                 (let [new-children (into-array
-                                                     TreeItem
-                                                     (map lazy-tree-item calls))]
+                                 (let [new-children (->> calls
+                                                         (remove (fn [{:keys [fn-name fn-ns]}]
+                                                                   (state/callstack-tree-hidden? state flow-id thread-id fn-name fn-ns)))
+                                                         (map lazy-tree-item)
+                                                         (into-array TreeItem))]
                                    (.setAll (proxy-super getChildren) new-children)
                                    (proxy-super getChildren))
                                  (proxy-super getChildren)))
@@ -139,7 +142,11 @@
         args-lbl (Label. (str " " (format-value-short args)))
         node-box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
         ctx-menu-options [{:text "Goto trace"
-                           :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}]
+                           :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
+                          {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
+                           :on-click #(do
+                                        (swap! state/*state state/callstack-tree-hide-fn flow-id thread-id fn-name fn-ns)
+                                        (update-call-stack-tree-pane flow-id thread-id))}]
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
     (doto node-box
       (.setOnMouseClicked (event-handler
@@ -307,7 +314,8 @@
         code-tab (doto (Tab. "Code")
                    (.setContent (create-code-pane flow-id thread-id)))
         callstack-tree-tab (doto (Tab. "Call stack")
-                             (.setContent (create-call-stack-tree-pane flow-id thread-id)))]
+                             (.setContent (create-call-stack-tree-pane flow-id thread-id))
+                             (.setOnSelectionChanged (event-handler [_] (update-call-stack-tree-pane flow-id thread-id))))]
 
     ;; make thread-tools-tab-pane take the full height
     (-> thread-tools-tab-pane
