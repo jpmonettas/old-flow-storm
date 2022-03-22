@@ -13,9 +13,9 @@
 (javafx.embed.swing.JFXPanel.)
 
 (defn update-trace-counter [cnt]
-  (run-later
-   (-> (first (obj-lookup "trace_count_label"))
-       (.setText (str cnt)))))
+  (let [[^Label trace-cnt-lbl] (obj-lookup "trace_count_label")]
+    (run-later
+     (.setText trace-cnt-lbl (str cnt)))))
 
 (defn trace-counter-box []
   (let [box (HBox.) ; spacing

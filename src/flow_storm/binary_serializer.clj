@@ -2,9 +2,9 @@
   (:import [java.io DataOutputStream]))
 
 (defn serialize-init-trace [^DataOutputStream dos [_ {:keys [flow-id form-id form ns timestamp]}]]
-  (let [ns-bytes (.getBytes ns "UTF-8")
+  (let [ns-bytes (.getBytes ^String ns "UTF-8")
         ns-cnt (count ns-bytes)
-        form-bytes (.getBytes form "UTF-8")
+        form-bytes (.getBytes ^String form "UTF-8")
         form-cnt (count form-bytes)]
     (doto dos
       (.writeByte 0) ;; 0 - :init-trace
@@ -20,7 +20,7 @@
       (.write form-bytes 0 form-cnt))))
 
 (defn serialize-exec-trace [^DataOutputStream dos [_ {:keys [flow-id form-id coor thread-id timestamp result outer-form?]}]]
-  (let [result-bytes (.getBytes result "UTF-8")
+  (let [result-bytes (.getBytes ^String result "UTF-8")
         result-cnt (count result-bytes)]
     (doto dos
       (.writeByte 1) ;; 1 - :exec-trace
@@ -40,13 +40,13 @@
       (.writeByte dos c ))))
 
 (defn serialize-fn-call-trace [^DataOutputStream dos [_ {:keys [flow-id form-id thread-id timestamp fn-name fn-ns args-vec]}]]
-  (let [fn-name-bytes (.getBytes fn-name "UTF-8")
+  (let [fn-name-bytes (.getBytes ^String fn-name "UTF-8")
         fn-name-cnt (count fn-name-bytes)
 
-        ns-bytes (.getBytes fn-ns "UTF-8")
+        ns-bytes (.getBytes ^String fn-ns "UTF-8")
         ns-cnt (count ns-bytes)
 
-        args-bytes (.getBytes args-vec "UTF-8")
+        args-bytes (.getBytes ^String args-vec "UTF-8")
         args-cnt (count args-bytes)]
     (doto dos
       (.writeByte 0) ;; 2 - :fn-call-trace
@@ -66,10 +66,10 @@
       (.write args-bytes 0 args-cnt))))
 
 (defn serialize-bind-trace [^DataOutputStream dos [_ {:keys [flow-id form-id thread-id timestamp symbol value coor]}]]
-  (let [symbol-bytes (.getBytes symbol "UTF-8")
+  (let [symbol-bytes (.getBytes ^String symbol "UTF-8")
         symbol-cnt (count symbol-bytes)
 
-        value-bytes (.getBytes value "UTF-8")
+        value-bytes (.getBytes ^String value "UTF-8")
         value-cnt (count value-bytes)]
     (doto dos
       (.writeByte 3) ;; 3 - :bind-trace

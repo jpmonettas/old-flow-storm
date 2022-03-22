@@ -4,14 +4,22 @@
             [flow-storm.api :as fs-api]
             [flow-storm.tracer :as tracer]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [clojure.pprint :as pp]))
+            [clojure.pprint :as pp]
+            [clj-async-profiler.core :as prof]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Some testing code ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
+
+(fs-api/trace
+ {:flow-id 0 :disable #{}}
+ (defn annoying-fn [n]
+   (+ n n)))
+
 (fs-api/trace
  {:flow-id 0 :disable #{}}
  (defn factorial [n]
+   (annoying-fn n)
    (if (zero? n)
      1
      (* n (factorial (dec n))))))
@@ -31,7 +39,7 @@
 ;; Utilities for reloading everything ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn start-and-add-data []
+(defn start-and-add-data [& _]
 
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue
   (fs-api/local-connect)

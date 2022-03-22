@@ -10,8 +10,8 @@
            [java.util.concurrent ArrayBlockingQueue]
            [java.io FileOutputStream ByteArrayOutputStream DataOutputStream]))
 
-(def trace-queue nil)
-(defonce send-thread nil)
+(def ^ArrayBlockingQueue trace-queue nil)
+(defonce ^Thread send-thread nil)
 
 (def ^:dynamic *flow-id* nil)
 (def ^:dynamic *init-traced-forms* nil)
@@ -162,7 +162,7 @@
      :ws-client wsc}))
 
 (defn build-file-sender [{:keys [file-path]}]
-  (let [file-dos (DataOutputStream. (FileOutputStream. file-path))
+  (let [file-dos (DataOutputStream. (FileOutputStream. ^String file-path))
         ;; _bos (ByteArrayOutputStream.)
         ;; file-dos (when to-file (DataOutputStream. bos))
         ]
@@ -193,7 +193,7 @@
 
                               ;; Consumer stats
                               (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                                (when (zero? (mod cnt 100000))                                 
+                                (when (zero? (mod cnt 1000))                                 
                                   (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
                                                 cnt
                                                 qsize

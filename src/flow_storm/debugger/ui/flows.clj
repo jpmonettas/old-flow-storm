@@ -10,7 +10,8 @@
            [javafx.scene Node]
            [javafx.scene.paint Color]
            [javafx.geometry Insets Side Orientation Pos]
-           [javafx.collections FXCollections]))
+           [javafx.collections FXCollections ObservableList]
+           [javafx.scene.input MouseEvent]))
 
 (declare jump-to-coord)
 
@@ -23,7 +24,7 @@
 
 (defn create-empty-flow [flow-id]
   (run-now
-   (let [[flows-tabs-pane] (obj-lookup "flows_tabs_pane")
+   (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")
          threads-tab-pane (doto (TabPane.)
                             (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
          _ (store-obj flow-id "threads_tabs_pane" threads-tab-pane)
@@ -54,7 +55,7 @@
 
 (defn update-result-pane [flow-id thread-id val]
   ;; TODO: find and update the tree
-  (let [[text-area] (obj-lookup flow-id (state-vars/thread-result-text-area-id thread-id))
+  (let [[^TextArea text-area] (obj-lookup flow-id (state-vars/thread-result-text-area-id thread-id))
         val-str (with-out-str (pp/pprint val))]
     (.setText text-area val-str)))
 
@@ -79,12 +80,12 @@
                            (updateItem [symb-val empty?]
                              (proxy-super updateItem symb-val empty?)
                              (if empty?
-                               (.setGraphic this nil)
+                               (.setGraphic ^Node this nil)
                                (let [symb-lbl (doto (Label. (first symb-val))
                                                 (.setPrefWidth 100))
                                      val-lbl (Label.  (format-value-short (second symb-val)))
                                      hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
-                                 (.setGraphic this hbox)))))))
+                                 (.setGraphic ^Node this hbox)))))))
         locals-list-view (doto (ListView. observable-bindings-list)
                            (.setEditable false)
                            (.setCellFactory cell-factory))]
@@ -92,7 +93,7 @@
     locals-list-view))
 
 (defn- update-locals-pane [flow-id thread-id bindings]
-  (let [[observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
+  (let [[^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object bindings))))
 
@@ -120,20 +121,21 @@
                                {:keys [calls]} frame]
                            (proxy [TreeItem] [frame]
                              (getChildren []
-                               (if (.isEmpty (proxy-super getChildren))
-                                 (let [new-children (->> calls
-                                                         (remove (fn [{:keys [fn-name fn-ns]}]
-                                                                   (state/callstack-tree-hidden? state flow-id thread-id fn-name fn-ns)))
-                                                         (map lazy-tree-item)
-                                                         (into-array TreeItem))]
-                                   (.setAll (proxy-super getChildren) new-children)
-                                   (proxy-super getChildren))
-                                 (proxy-super getChildren)))
+                               (let [^ObservableList super-childrens (proxy-super getChildren)]
+                                 (if (.isEmpty super-childrens)
+                                   (let [new-children (->> calls
+                                                           (remove (fn [{:keys [fn-name fn-ns]}]
+                                                                     (state/callstack-tree-hidden? state flow-id thread-id fn-name fn-ns)))
+                                                           (map lazy-tree-item)
+                                                           (into-array TreeItem))]
+                                     (.setAll super-childrens new-children)
+                                     super-childrens)
+                                   super-childrens)))
                              (isLeaf [] (empty? calls)))))
         root-item (lazy-tree-item (state/thread-callstack-tree @state/*state flow-id thread-id))
         [tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))]
 
-    (.setRoot tree-view root-item)))
+    (.setRoot ^TreeView tree-view root-item)))
 
 (defn- create-call-stack-tree-node [{:keys [call-trace-idx fn-name fn-ns args calls]} flow-id thread-id]
   (let [ns-lbl (Label. (str fn-ns "/"))
@@ -150,7 +152,7 @@
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
     (doto node-box
       (.setOnMouseClicked (event-handler
-                           [ev]
+                           [^MouseEvent ev]
                            (.show ctx-menu
                                   node-box
                                   (.getScreenX ev)
@@ -176,15 +178,15 @@
     (VBox. (into-array Node [update-btn tree-view]))))
 
 
-(defn- highlight-executing [token-text]
+(defn- highlight-executing [^Text token-text]
   (doto token-text
     (.setFill (Color/RED))))
 
-(defn- highlight-interesting [token-text]
+(defn- highlight-interesting [^Text token-text]
   (doto token-text
     (.setFill (Color/web "#32a852"))))
 
-(defn- arm-interesting [token-text traces]
+(defn- arm-interesting [^Text token-text traces]
   (let [{:keys [flow-id thread-id]} (first traces)]
     (.setStyle token-text "-fx-cursor: hand; -fx-font-weight: bold;")
 
@@ -196,7 +198,7 @@
                                         :on-click #(jump-to-coord flow-id thread-id tidx)}))))
             ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
         (.setOnMouseClicked token-text (event-handler
-                                        [ev]
+                                        [^MouseEvent ev]
                                         (.show ctx-menu
                                                token-text
                                                (.getScreenX ev)
@@ -206,7 +208,7 @@
                                       [ev]
                                       (jump-to-coord flow-id thread-id (-> traces first meta :trace-idx)))))))
 
-(defn- un-highlight [token-text]
+(defn- un-highlight [^Text token-text]
   (doto token-text
     (.setFill (Color/BLACK))
     (.setStyle "-fx-cursor: pointer;")
@@ -217,26 +219,29 @@
         trace-count (state/thread-exec-trace-count state flow-id thread-id)]
     (when (<= 0 new-trace-idx (dec trace-count))
       (let [curr-idx (state/thread-curr-trace-idx state flow-id thread-id)
-            from-trace (state/thread-trace state flow-id thread-id curr-idx)
-            prev-form-id (:form-id from-trace)
-            to-trace (state/thread-trace state flow-id thread-id new-trace-idx)
-            next-form-id (:form-id to-trace)
-            [curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
-            from-frame (state/thread-find-frame state flow-id thread-id curr-idx)
-            to-frame (state/thread-find-frame state flow-id thread-id new-trace-idx)]
+            curr-trace (state/thread-trace state flow-id thread-id curr-idx)
+            curr-form-id (:form-id curr-trace)
+            next-trace (state/thread-trace state flow-id thread-id new-trace-idx)
+            next-form-id (:form-id next-trace)
+            [^Label curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
+            curr-frame (state/thread-find-frame state flow-id thread-id curr-idx)
+            next-frame (state/thread-find-frame state flow-id thread-id new-trace-idx)
+            changing-frame? (not= curr-frame next-frame)
+            changing-form? (not= curr-form-id next-form-id)]
 
         ;; update thread current trace lable
         (.setText curr_trace_lbl (str new-trace-idx))
 
-        (when (not= from-frame to-frame)
+        (when changing-form?
           ;; we are leaving a frame with this jump, so unhighlight all prev-form interesting tokens
-          (let [prev-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id prev-form-id curr-idx)]
-            (doseq [{:keys [coor]} prev-form-interesting-expr-traces]
-              (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id prev-form-id coor))]
+          (let [curr-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id curr-form-id curr-idx)]
+            (doseq [{:keys [coor]} curr-form-interesting-expr-traces]
+              (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id curr-form-id coor))]
                 (doseq [text token-texts]
                   (un-highlight text))))))
 
-        (when (or (not= from-frame to-frame)
+        (when (or changing-form?
+                  changing-frame?
                   (zero? curr-idx))
           ;; we are leaving a frame with this jump, or its the first trace
           ;; highlight all interesting tokens for the form we are currently in and also scroll to that form
@@ -253,25 +258,25 @@
                   (highlight-interesting text))))))
 
         ;; "unhighlight" prev executing tokens
-        (when (and (state/exec-trace? from-trace))
-          (let [from-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
-                                                                               (:form-id from-trace)
-                                                                               (:coor from-trace)))]
-            (doseq [text from-token-texts]
-              (if (= prev-form-id next-form-id)
+        (when (and (state/exec-trace? curr-trace))
+          (let [curr-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
+                                                                               (:form-id curr-trace)
+                                                                               (:coor curr-trace)))]
+            (doseq [text curr-token-texts]
+              (if (= curr-form-id next-form-id)
                 (highlight-interesting text)
                 (un-highlight text)))))
 
         ;; highlight executing tokens
-        (when (state/exec-trace? to-trace)
-          (let [to-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
-                                                                             (:form-id to-trace)
-                                                                             (:coor to-trace)))]
-            (doseq [text to-token-texts]
+        (when (state/exec-trace? next-trace)
+          (let [next-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
+                                                                               (:form-id next-trace)
+                                                                               (:coor next-trace)))]
+            (doseq [text next-token-texts]
               (highlight-executing text))))
 
         ;; update reusult panel
-        (update-result-pane flow-id thread-id (:result to-trace))
+        (update-result-pane flow-id thread-id (:result next-trace))
 
         ;; update locals panel
         (update-locals-pane flow-id thread-id (state/bindings-for-trace state flow-id thread-id new-trace-idx))
@@ -302,7 +307,7 @@
 
 (defn update-thread-trace-count-lbl [flow-id thread-id cnt]
   (run-later
-   (let [[lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
+   (let [[^Label lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
      (.setText lbl (str cnt)))))
 
 (defn- create-thread-pane [flow-id thread-id]
