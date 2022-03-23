@@ -51,7 +51,7 @@
 (defmacro trace
   "Recursively instrument a form for tracing."
   ;; TODO: make it possible with the trace macro to set a flow id
-  ([form] `(trace {:flow-id 0} ~form)) ;; need to do this so multiarity macros work
+  ([form] `(trace {:disable #{}} ~form)) ;; need to do this so multiarity macros work
   ([config form]
    (let [form-ns (str (ns-name *ns*))
          ctx (inst-forms/build-form-instrumentation-ctx config form-ns form &env)
@@ -105,9 +105,12 @@
   `(flow-storm.api/trace 0 ~form))
 
 (defmacro run-with-execution-ctx
-  [{:keys [print-length print-level]} form]
-  `(binding [tracer/*init-traced-forms* (atom #{})
-             tracer/*flow-id* 0]
+  [{:keys [print-length print-level flow-id]} form]
+  (alter-var-root #'tracer/*init-traced-forms* (constantly (atom #{})))
+  (alter-var-root #'tracer/*flow-id* (constantly (or flow-id 0)))
+  form
+  #_`(binding [tracer/*init-traced-forms* (atom #{})
+             tracer/*flow-id* (or flow-id 0)]
      ~form))
 
 (comment

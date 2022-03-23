@@ -41,8 +41,7 @@
   [{:keys [form-id args-vec fn-name ns]} form]  
   (let [thread-id (.getId (Thread/currentThread))]
     (when-not (contains? @*init-traced-forms* [*flow-id* thread-id form-id])
-      (let [
-            trace (map->InitTrace {:flow-id *flow-id*
+      (let [trace (map->InitTrace {:flow-id *flow-id*
                                    :form-id form-id
                                    :thread-id thread-id
                                    :form form

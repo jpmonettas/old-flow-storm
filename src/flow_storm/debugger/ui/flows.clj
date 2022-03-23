@@ -234,7 +234,11 @@
             [^Label curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
             curr-frame (state/thread-find-frame state flow-id thread-id curr-idx)
             next-frame (state/thread-find-frame state flow-id thread-id new-trace-idx)
-            changing-frame? (not= curr-frame next-frame)
+            ;; because how frames are cached by trace, their pointers can't be compared
+            ;; so a content comparision is needed. Comparing :call-trace-idx is enough since it is
+            ;; a frame id
+            changing-frame? (not= (:call-trace-idx curr-frame)
+                                  (:call-trace-idx next-frame))
             changing-form? (not= curr-form-id next-form-id)]
 
         ;; update thread current trace lable
@@ -242,7 +246,15 @@
 
         (when changing-form?
           ;; we are leaving a frame with this jump, so unhighlight all prev-form interesting tokens
-          (let [curr-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id curr-form-id curr-idx)]
+          (let [curr-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id curr-form-id curr-idx)
+                [curr-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id curr-form-id))
+                [next-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id next-form-id))
+                [thread-scroll-pane]    (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+
+            (ui-utils/center-node-in-scroll-pane thread-scroll-pane next-form-pane)
+            (.setBackground curr-form-pane form-background-normal)
+            (.setBackground next-form-pane form-background-highlighted)
+
             (doseq [{:keys [coor]} curr-form-interesting-expr-traces]
               (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id curr-form-id coor))]
                 (doseq [text token-texts]
@@ -254,15 +266,8 @@
           ;; we are leaving a frame with this jump, or its the first trace
           ;; highlight all interesting tokens for the form we are currently in and also scroll to that form
           (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
-                                                  (group-by :coor))
-                [curr-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id curr-form-id))
-                [next-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id next-form-id))
-                [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+                                                  (group-by :coor))]
 
-            (ui-utils/center-node-in-scroll-pane thread-scroll-pane next-form-pane)
-
-            (.setBackground curr-form-pane form-background-normal)
-            (.setBackground next-form-pane form-background-highlighted)
             (doseq [[coor traces] interesting-expr-traces-grps]
               (let [token-id (state-vars/form-token-id thread-id next-form-id coor)
                     token-texts (obj-lookup flow-id token-id)]

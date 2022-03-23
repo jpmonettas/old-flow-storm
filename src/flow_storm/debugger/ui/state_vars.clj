@@ -43,7 +43,7 @@
          objs (get-in all-objs [flow-id obj-id])]
      (when-not objs
        (tap> (format "Flow object not found flow-id: %d obj-id: %s" flow-id obj-id))
-       (tap> (keys (get all-objs flow-id))))
+       #_(tap> (keys (get all-objs flow-id))))
      objs)))
 
 (defn clean-flow-objs [flow-id]
@@ -54,7 +54,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn form-token-id [thread-id form-id coord]
-  (format "form_token_%d_%d_%d" thread-id form-id (hash coord)))
+  (format "form_token_%d_%d_%s" thread-id form-id (hash coord)))
 
 (defn thread-curr-trace-lbl-id [thread-id]
   (format "thread_curr_trace_lbl_%d" thread-id))

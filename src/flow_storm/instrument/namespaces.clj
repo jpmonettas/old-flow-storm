@@ -136,7 +136,10 @@
            (println)))))))
 
 (defn trace-files-for-namespaces [prefixes config]
-  (let [ns-set (all-ns-with-prefixes prefixes {:excluding #{""}})
+  (let [config (-> config
+                   (update :excluding #(or % #{}))
+                   (update :disable #(or % #{})))
+        ns-set (all-ns-with-prefixes prefixes config)
         files-set (interesting-files-for-namespaces ns-set)]
     (doseq [file files-set]
       (trace-file-forms file config))))

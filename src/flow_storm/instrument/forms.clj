@@ -195,7 +195,7 @@
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
-  [[name & args :as form] {:keys [form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
+  [[name & args :as form] {:keys [orig-outer-form form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
   (cons name
         ;; We're dealing with some low level stuff here, and some of
         ;; these internal forms are completely undocumented, so let's
@@ -263,21 +263,13 @@
                                ;; then remove it from ctx so fn* declared down the road don't think they are defn
                                instrument-fn-arities-bodies (fn [fn-name [arity-args-vec & arity-body-forms :as arity]]
                                                               (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
-                                                                    outer-preamble (cond-> []
-
-                                                                                     ;; if it is a top level fn* add a trace to register the form
-                                                                                     defn-def
-                                                                                     (into [`(~on-outer-form-init-fn {:form-id ~form-id
-                                                                                                                      :ns ~form-ns}
-                                                                                              ;;~(pr-str (second orig-form))
-                                                                                              ~orig-form
-                                                                                              )])
-
-                                                                                     true
-                                                                                     (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
-
-                                                                                     ;; always trace argument bindings
-                                                                                     true     (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
+                                                                    outer-preamble (-> []
+                                                                                       (into [`(~on-outer-form-init-fn {:form-id ~form-id
+                                                                                                                        :ns ~form-ns}
+                                                                                                (quote ~orig-outer-form)
+                                                                                                )])
+                                                                                       (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
+                                                                                       (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
 
                                                                     ctx' (-> ctx
                                                                              (assoc :orig-form orig-form)
@@ -672,6 +664,7 @@
      :compiler         (if (contains? env :js-globals)
                          :cljs
                          :clj)
+     :orig-outer-form  form
      :form-id          form-id
      :form-ns          form-ns
      :disable          (or disable #{}) ;; :expr :binding
