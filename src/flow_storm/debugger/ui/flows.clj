@@ -1,8 +1,10 @@
 (ns flow-storm.debugger.ui.flows
   (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now]]
+            [flow-storm.debugger.trace-indexer.protos :as indexer]
             [clojure.pprint :as pp]
-            [flow-storm.debugger.state :as state]
+            [flow-storm.debugger.state :as state :refer [dbg-state]]
+            [flow-storm.debugger.form-pprinter :as form-pprinter]
             [clojure.string :as str])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
            [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
@@ -123,24 +125,23 @@
     left-right-pane))
 
 (defn- update-call-stack-tree-pane [flow-id thread-id]
-  (let [state @state/*state
-        lazy-tree-item (fn lazy-tree-item [frame]
-                         (let [;; TODO: get :ret here from the mut-ref
-                               {:keys [calls]} frame]
-                           (proxy [TreeItem] [frame]
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        lazy-tree-item (fn lazy-tree-item [tree-node]
+                         (let [calls (indexer/callstack-tree-childs indexer tree-node)]
+                           (proxy [TreeItem] [tree-node]
                              (getChildren []
                                (let [^ObservableList super-childrens (proxy-super getChildren)]
                                  (if (.isEmpty super-childrens)
                                    (let [new-children (->> calls
                                                            (remove (fn [{:keys [fn-name fn-ns]}]
-                                                                     (state/callstack-tree-hidden? state flow-id thread-id fn-name fn-ns)))
+                                                                     (state/callstack-tree-hidden? dbg-state flow-id thread-id fn-name fn-ns)))
                                                            (map lazy-tree-item)
                                                            (into-array TreeItem))]
                                      (.setAll super-childrens new-children)
                                      super-childrens)
                                    super-childrens)))
                              (isLeaf [] (empty? calls)))))
-        root-item (lazy-tree-item (state/thread-callstack-tree @state/*state flow-id thread-id))
+        root-item (lazy-tree-item (indexer/callstack-tree-root indexer))
         [tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))]
 
     (.setRoot ^TreeView tree-view root-item)))
@@ -155,7 +156,7 @@
                            :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
                           {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
                            :on-click #(do
-                                        (swap! state/*state state/callstack-tree-hide-fn flow-id thread-id fn-name fn-ns)
+                                        (state/callstack-tree-hide-fn dbg-state flow-id thread-id fn-name fn-ns)
                                         (update-call-stack-tree-pane flow-id thread-id))}]
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
     (doto node-box
@@ -216,56 +217,103 @@
                                       [ev]
                                       (jump-to-coord flow-id thread-id (-> traces first meta :trace-idx)))))))
 
+(defn- add-form [flow-id thread-id form-id]
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        form (indexer/get-form indexer form-id)
+        print-tokens (binding [pp/*print-right-margin* 80]
+                       (form-pprinter/pprint-tokens (:form/form form)))
+        text-font (Font/font "monospaced" 13)
+        [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
+        tokens-texts (->> print-tokens
+                          (map (fn [tok]
+                                 (let [text (Text.
+                                             (case tok
+                                               :nl   "\n"
+                                               :sp   " "
+                                               (first tok)))
+                                       coord (when (vector? tok) (second tok))]
+                                   (.setFont text text-font)
+                                   (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
+                                   text))))
+        ns-label (doto (Label. (format "ns: %s" (:form/ns form)))
+                   (.setFont (Font. 10)))
+
+        form-header (doto (HBox. (into-array Node [ns-label]))
+                      (.setAlignment (Pos/TOP_RIGHT)))
+        form-text-flow (TextFlow. (into-array Text tokens-texts))
+        form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
+                    (.setBackground form-background-normal)
+                    (.setStyle "-fx-padding: 10;"))]
+    (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
+
+    (-> forms-box
+        .getChildren
+        (.add 0 form-pane))
+
+    form-pane))
+
+(defn- update-thread-trace-count-lbl [flow-id thread-id cnt]
+  (let [[^Label lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
+    (.setText lbl (str cnt))))
+
 (defn- un-highlight [^Text token-text]
   (doto token-text
     (.setFill (Color/BLACK))
     (.setStyle "-fx-cursor: pointer;")
     (.setOnMouseClicked (event-handler [_]))))
 
-(defn- jump-to-coord [flow-id thread-id new-trace-idx]
-  (let [state @state/*state
-        trace-count (state/thread-exec-trace-count state flow-id thread-id)]
-    (when (<= 0 new-trace-idx (dec trace-count))
-      (let [curr-idx (state/thread-curr-trace-idx state flow-id thread-id)
-            curr-trace (state/thread-trace state flow-id thread-id curr-idx)
+(defn highlight-form [flow-id thread-id form-id]
+  (let [[form-pane]          (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))
+        [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+
+    ;; if the form we are about to highlight doesn't exist in the view add it first
+    (let [form-pane (or form-pane (add-form flow-id thread-id form-id))]
+
+      (ui-utils/center-node-in-scroll-pane thread-scroll-pane form-pane)
+      (.setBackground form-pane form-background-highlighted))))
+
+(defn- unhighlight-form [flow-id thread-id form-id]
+  (let [[form-pane] (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))]
+    (.setBackground form-pane form-background-normal)))
+
+(defn- jump-to-coord [flow-id thread-id next-trace-idx]
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        trace-count (indexer/thread-exec-count indexer)]
+    (when (<= 0 next-trace-idx (dec trace-count))
+      (let [curr-idx (state/current-trace-idx dbg-state flow-id thread-id)
+            curr-trace (indexer/get-trace indexer curr-idx)
             curr-form-id (:form-id curr-trace)
-            next-trace (state/thread-trace state flow-id thread-id new-trace-idx)
+            next-trace (indexer/get-trace indexer next-trace-idx)
             next-form-id (:form-id next-trace)
             [^Label curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
-            curr-frame (state/thread-find-frame state flow-id thread-id curr-idx)
-            next-frame (state/thread-find-frame state flow-id thread-id new-trace-idx)
             ;; because how frames are cached by trace, their pointers can't be compared
             ;; so a content comparision is needed. Comparing :call-trace-idx is enough since it is
-            ;; a frame id
-            changing-frame? (not= (:call-trace-idx curr-frame)
-                                  (:call-trace-idx next-frame))
+            ;; a frame
+            changing-frame? (not= (indexer/callstack-frame-call-trace-idx indexer curr-idx)
+                                  (indexer/callstack-frame-call-trace-idx indexer next-trace-idx))
             changing-form? (not= curr-form-id next-form-id)]
 
-        ;; update thread current trace lable
-        (.setText curr_trace_lbl (str new-trace-idx))
+        ;; update thread current trace label and total traces
+        (.setText curr_trace_lbl (str next-trace-idx))
+        (update-thread-trace-count-lbl flow-id thread-id trace-count)
 
         (when changing-form?
-          ;; we are leaving a frame with this jump, so unhighlight all prev-form interesting tokens
-          (let [curr-form-interesting-expr-traces (state/interesting-expr-traces state flow-id thread-id curr-form-id curr-idx)
-                [curr-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id curr-form-id))
-                [next-form-pane]        (obj-lookup flow-id (state-vars/thread-form-box-id thread-id next-form-id))
-                [thread-scroll-pane]    (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+          ;; we are leaving a form with this jump, so unhighlight all curr-form interesting tokens
+          (let [curr-form-interesting-expr-traces (indexer/interesting-expr-traces indexer curr-form-id curr-idx)]
 
-            (ui-utils/center-node-in-scroll-pane thread-scroll-pane next-form-pane)
-            (.setBackground curr-form-pane form-background-normal)
-            (.setBackground next-form-pane form-background-highlighted)
+            (unhighlight-form flow-id thread-id curr-form-id)
+            (highlight-form flow-id thread-id next-form-id)
 
             (doseq [{:keys [coor]} curr-form-interesting-expr-traces]
               (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id curr-form-id coor))]
                 (doseq [text token-texts]
                   (un-highlight text))))))
 
-        (when (or changing-form?
-                  changing-frame?
+        (when (or changing-frame?
                   (zero? curr-idx))
           ;; we are leaving a frame with this jump, or its the first trace
-          ;; highlight all interesting tokens for the form we are currently in and also scroll to that form
-          (let [interesting-expr-traces-grps (->> (state/interesting-expr-traces state flow-id thread-id next-form-id new-trace-idx)
+          ;; highlight all interesting tokens for the form we are currently in
+          (let [interesting-expr-traces-grps (->> (indexer/interesting-expr-traces indexer next-form-id next-trace-idx)
                                                   (group-by :coor))]
 
             (doseq [[coor traces] interesting-expr-traces-grps]
@@ -297,9 +345,9 @@
         (update-result-pane flow-id thread-id (:result next-trace))
 
         ;; update locals panel
-        (update-locals-pane flow-id thread-id (state/bindings-for-trace state flow-id thread-id new-trace-idx))
+        (update-locals-pane flow-id thread-id (indexer/bindings-for-trace indexer next-trace-idx))
 
-        (swap! state/*state state/set-thread-curr-trace-idx flow-id thread-id new-trace-idx)))))
+        (state/set-trace-idx dbg-state flow-id thread-id next-trace-idx)))))
 
 (defn- create-thread-controls-pane [flow-id thread-id]
   (let [prev-btn (doto (Button. "<")
@@ -307,7 +355,7 @@
                                   [ev]
                                   (jump-to-coord flow-id
                                                  thread-id
-                                                 (dec (state/thread-curr-trace-idx @state/*state flow-id thread-id))))))
+                                                 (dec (state/current-trace-idx dbg-state flow-id thread-id))))))
         curr-trace-lbl (Label. "0")
         separator-lbl (Label. "/")
         thread-trace-count-lbl (Label. "-")
@@ -318,15 +366,10 @@
                                   [ev]
                                   (jump-to-coord flow-id
                                                  thread-id
-                                                 (inc (state/thread-curr-trace-idx @state/*state flow-id thread-id))))))]
+                                                 (inc (state/current-trace-idx dbg-state flow-id thread-id))))))]
 
     (doto (HBox. (into-array Node [prev-btn curr-trace-lbl separator-lbl thread-trace-count-lbl next-btn]))
       (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;"))))
-
-(defn update-thread-trace-count-lbl [flow-id thread-id cnt]
-  (run-later
-   (let [[^Label lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
-     (.setText lbl (str cnt)))))
 
 (defn- create-thread-pane [flow-id thread-id]
   (let [thread-pane (VBox.)
@@ -364,35 +407,6 @@
      (-> threads-tabs-pane
            .getTabs
            (.addAll [thread-tab])))))
-
-(defn add-form [flow-id thread-id form-id form-ns print-tokens]
-  (run-now
-   (let [text-font (Font/font "monospaced" 13)
-         [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
-         tokens-texts (->> print-tokens
-                           (map (fn [tok]
-                                  (let [text (Text.
-                                              (case tok
-                                                :nl   "\n"
-                                                :sp   " "
-                                                (first tok)))
-                                        coord (when (vector? tok) (second tok))]
-                                    (.setFont text text-font)
-                                    (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
-                                    text))))
-         ns-label (doto (Label. (format "ns: %s" form-ns))
-                    (.setFont (Font. 10)))
-
-         form-header (doto (HBox. (into-array Node [ns-label]))
-                       (.setAlignment (Pos/TOP_RIGHT)))
-         form-text-flow (TextFlow. (into-array Text tokens-texts))
-         form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
-                     (.setBackground form-background-normal)
-                     (.setStyle "-fx-padding: 10;"))]
-     (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
-     (-> forms-box
-         .getChildren
-         (.add 0 form-pane)))))
 
 (defn main-pane []
 

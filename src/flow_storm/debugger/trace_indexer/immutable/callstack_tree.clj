@@ -1,4 +1,4 @@
-(ns flow-storm.debugger.callstack-tree
+(ns flow-storm.debugger.trace-indexer.immutable.callstack-tree
   (:require [clojure.zip :as zip]))
 
 (defn- make-tree-node [{:keys [form-id fn-name fn-ns args-vec timestamp]} trace-idx]
@@ -64,7 +64,7 @@
                                      z)))]
     callstack-tree-3))
 
-(defn callstack-tree [{:keys [zipper]}]
+(defn callstack-tree-root [{:keys [zipper]}]
   (zip/root zipper))
 
 (defn find-frame [{:keys [trace-idx->frame]} trace-idx]

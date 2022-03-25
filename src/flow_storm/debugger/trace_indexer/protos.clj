@@ -1,0 +1,15 @@
+(ns flow-storm.debugger.trace-indexer.protos)
+
+(defprotocol TraceIndex
+  (thread-exec-count [_])
+  (add-form [_ form-id form-ns form])
+  (get-form [_ form-id])
+  (add-fn-call-trace [_ trace])
+  (add-exec-trace [_ trace])
+  (add-bind-trace [_ trace])
+  (get-trace [_ idx])
+  (bindings-for-trace [_ trace-idx])
+  (interesting-expr-traces [_ form-id trace-idx])
+  (callstack-tree-root [_])
+  (callstack-tree-childs [_ node])
+  (callstack-frame-call-trace-idx [_ trace-idx]))

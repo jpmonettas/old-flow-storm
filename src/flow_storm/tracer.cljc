@@ -179,7 +179,7 @@
    ;; since we could be trying to reconnect
    (when send-thread (.stop send-thread))
    
-   (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 20000000)))
+   (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 30000000)))
          *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
          
          send-thread (Thread.
@@ -192,7 +192,7 @@
 
                               ;; Consumer stats
                               (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                                (when (zero? (mod cnt 1000))                                 
+                                (when (zero? (mod cnt 100000))                                 
                                   (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
                                                 cnt
                                                 qsize

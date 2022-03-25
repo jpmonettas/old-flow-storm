@@ -106,9 +106,10 @@
 
 (defmacro run-with-execution-ctx
   [{:keys [print-length print-level flow-id]} form]
-  (alter-var-root #'tracer/*init-traced-forms* (constantly (atom #{})))
-  (alter-var-root #'tracer/*flow-id* (constantly (or flow-id 0)))
-  form
+  `(do
+     (alter-var-root #'tracer/*init-traced-forms* (constantly (atom #{})))
+     (alter-var-root #'tracer/*flow-id* (constantly (or ~flow-id 0)))
+     ~form)
   #_`(binding [tracer/*init-traced-forms* (atom #{})
              tracer/*flow-id* (or flow-id 0)]
      ~form))
@@ -138,7 +139,7 @@
   )
 
 ;; Run with : clj -X flow-storm.api/cljs-test
-(defn cljs-test [& args]
+#_(defn cljs-test [& args]
 
   (local-connect)
 

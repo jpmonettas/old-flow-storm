@@ -17,6 +17,10 @@
 ;; `clean-flow-objs` is called
 (defonce flows-ui-objs (atom {}))
 
+(defn reset-state! []
+  (reset! ui-objs {})
+  (reset! flows-ui-objs {}))
+
 (defn store-obj
 
   ([obj-id obj-ref]

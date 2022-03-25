@@ -60,22 +60,8 @@
 
 (defn build-main-pane []
   (let [mp (doto (BorderPane.)
-                    #_(.setStyle styles/backpane)
-                    #_(.setTop (doto (Button. "Click me")
-                               (.setOnAction (event-handler [ev] (println "Clicked")))))
-                    (.setCenter (main-tabs-pane))
-                    (.setBottom (trace-counter-box)))]
-
-
-    #_(let [ctx-menu (ui-utils/make-context-menu [{:text "Menu1" :on-click #(println "Menu1")}
-                                                {:text "Quit" :on-click  #(close-stage)}])]
-      (.setOnContextMenuRequested mp
-                                  (event-handler
-                                   [ev]
-                                   (.show ctx-menu
-                                          mp
-                                          (.getScreenX ev)
-                                          (.getScreenY ev)))))
+             (.setCenter (main-tabs-pane))
+             (.setBottom (trace-counter-box)))]
     mp))
 
 (defn reset-scene-main-pane []
@@ -109,13 +95,3 @@
      (catch Exception e
        (tap> (str "UI Thread exception"
                   (with-out-str (.printStackTrace e))))))))
-
-(defn -main
-  ""
-  [& args]
-
-  )
-
-(comment
-
-  )
