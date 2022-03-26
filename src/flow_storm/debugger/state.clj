@@ -1,6 +1,5 @@
 (ns flow-storm.debugger.state
   (:require [clojure.spec.alpha :as s]
-            [flow-storm.debugger.trace-indexer.immutable.callstack-tree :as callstack-tree]
             [flow-storm.tracer])
   (:import [flow_storm.tracer InitTrace BindTrace FnCallTrace ExecTrace]))
 

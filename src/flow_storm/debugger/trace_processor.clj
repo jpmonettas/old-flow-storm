@@ -5,6 +5,7 @@
             [flow-storm.debugger.ui.utils :as ui-utils]
             [flow-storm.debugger.ui.flows :as ui-flows]
             [flow-storm.debugger.trace-indexer.immutable.impl :as imm-trace-indexer]
+            [flow-storm.debugger.trace-indexer.mutable.impl :as mut-trace-indexer]
             [clojure.pprint :as pp]
             flow-storm.tracer)
   (:import [flow_storm.tracer InitTrace ExecTrace FnCallTrace BindTrace]))
@@ -37,7 +38,10 @@
 
     ;; if thread doesn't exist, create one
     (when-not (state/get-thread dbg-state flow-id thread-id)
-      (state/create-thread dbg-state flow-id thread-id (imm-trace-indexer/make-indexer))
+      (state/create-thread dbg-state flow-id thread-id
+                           #_(imm-trace-indexer/make-indexer)
+                           (mut-trace-indexer/make-indexer)
+                           )
       (ui-flows/create-empty-thread flow-id thread-id))
 
     ;; add the form

@@ -47,7 +47,7 @@
   (get-trace [_ idx]
     (get (:traces @*state) idx))
 
-  (bindings-for-trace [_ trace-idx]
+  (bindings-for-trace [this trace-idx]
     (-> (callstack-tree/find-frame (:callstack-tree @*state) trace-idx)
         :bindings))
 
@@ -61,6 +61,9 @@
 
   (callstack-tree-root [_]
     (callstack-tree/callstack-tree-root (:callstack-tree @*state)))
+
+  (callstack-node-frame [this node]
+    (select-keys node [:fn-name :fn-ns :call-trace-idx :args :timestamp :form-id :ret]))
 
   (callstack-tree-childs [_ node]
     (:calls node))

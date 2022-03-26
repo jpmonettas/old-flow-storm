@@ -11,5 +11,6 @@
   (bindings-for-trace [_ trace-idx])
   (interesting-expr-traces [_ form-id trace-idx])
   (callstack-tree-root [_])
+  (callstack-node-frame [_ node])
   (callstack-tree-childs [_ node])
   (callstack-frame-call-trace-idx [_ trace-idx]))

@@ -27,7 +27,9 @@
 
 (defn- format-value-short [v]
   (let [max-len 80
-        s (pr-str v)
+        s (binding [clojure.core/*print-level* 3
+                    clojure.core/*print-length* 3]
+            (pr-str v))
         len (count s)]
     (cond-> (subs s 0 (min max-len len))
       (> len max-len) (str " ... "))))
@@ -133,20 +135,25 @@
                                (let [^ObservableList super-childrens (proxy-super getChildren)]
                                  (if (.isEmpty super-childrens)
                                    (let [new-children (->> calls
-                                                           (remove (fn [{:keys [fn-name fn-ns]}]
-                                                                     (state/callstack-tree-hidden? dbg-state flow-id thread-id fn-name fn-ns)))
+                                                           (remove (fn [child-node]
+                                                                     (let [{:keys [fn-name fn-ns]} (indexer/callstack-node-frame indexer child-node)]
+                                                                       (state/callstack-tree-hidden? dbg-state flow-id thread-id fn-name fn-ns))))
                                                            (map lazy-tree-item)
                                                            (into-array TreeItem))]
                                      (.setAll super-childrens new-children)
                                      super-childrens)
                                    super-childrens)))
                              (isLeaf [] (empty? calls)))))
-        root-item (lazy-tree-item (indexer/callstack-tree-root indexer))
+        tree-root-node (indexer/callstack-tree-root indexer)
+        root-item (lazy-tree-item tree-root-node)
         [tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))]
 
     (.setRoot ^TreeView tree-view root-item)))
 
-(defn- create-call-stack-tree-node [{:keys [call-trace-idx fn-name fn-ns args calls]} flow-id thread-id]
+(defn- create-call-stack-tree-node [{:keys [call-trace-idx fn-name fn-ns args]} flow-id thread-id]
+  ;; Important !
+  ;; this will be called for all visible tree nodes after any expansion
+  ;; so it should be fast
   (let [ns-lbl (Label. (str fn-ns "/"))
         fn-name-lbl (doto (Label. fn-name)
                       (.setStyle "-fx-font-weight: bold;"))
@@ -168,18 +175,22 @@
                                   (.getScreenY ev)))))))
 
 (defn- create-call-stack-tree-pane [flow-id thread-id]
-  (let [update-btn (doto (Button. "Update")
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        update-btn (doto (Button. "Update")
                      (.setOnAction (event-handler
                                     [_]
                                     (update-call-stack-tree-pane flow-id thread-id))))
         cell-factory (proxy [javafx.util.Callback] []
                        (call [tv]
                          (proxy [TreeCell] []
-                           (updateItem [frame empty?]
-                             (proxy-super updateItem frame empty?)
+                           (updateItem [tree-node empty?]
+                             (proxy-super updateItem tree-node empty?)
                              (if empty?
                                (.setGraphic this nil)
-                               (.setGraphic this (create-call-stack-tree-node frame flow-id thread-id)))))))
+                               (.setGraphic this (create-call-stack-tree-node
+                                                  (indexer/callstack-node-frame indexer tree-node)
+                                                  flow-id
+                                                  thread-id)))))))
         tree-view (doto (TreeView.)
                     (.setEditable false)
                     (.setCellFactory cell-factory))]
