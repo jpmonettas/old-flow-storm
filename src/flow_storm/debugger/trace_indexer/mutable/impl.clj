@@ -1,7 +1,9 @@
 (ns flow-storm.debugger.trace-indexer.mutable.impl
   (:require [flow-storm.debugger.trace-indexer.protos :refer [TraceIndex]]
             [flow-storm.debugger.trace-indexer.mutable.callstack-tree :as callstack-tree]
-            [clojure.spec.alpha :as s])
+            [clojure.string :as str]
+            [clojure.spec.alpha :as s]
+            [flow-storm.utils :as utils])
   (:import [java.util ArrayList HashMap]))
 
 (deftype MutableTraceIndexer [^ArrayList traces
@@ -73,7 +75,28 @@
     (callstack-tree/tree-node-childs node))
 
   (callstack-frame-call-trace-idx [_ trace-idx]
-    (callstack-tree/frame-call-trace-index callstack-tree trace-idx)))
+    (callstack-tree/frame-call-trace-index callstack-tree trace-idx))
+
+  (search-next-fn-call-trace [_ search-str from-idx]
+    (loop [i 0
+           stack ()]
+      (when (< i (count traces))
+        (let [{:keys [fn-name args-vec] :as t} (.get traces i)]
+          (if (utils/fn-call-trace? t)
+
+            (if (and (> i from-idx)
+                     (or (str/includes? fn-name search-str)
+                         (str/includes? (pr-str args-vec) search-str)))
+
+              ;; if matches
+              (conj stack i)
+
+              ;; else
+              (recur (inc i) (conj stack i)))
+            ;; it is a exec-trace, check if it is returning
+            (if (:outer-form? t)
+              (recur (inc i) (pop stack))
+              (recur (inc i) stack))))))))
 
 (defn make-indexer []
   (->MutableTraceIndexer (ArrayList.)

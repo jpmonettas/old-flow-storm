@@ -62,7 +62,11 @@
 (defprotocol UIState
   (increment-trace-counter [_])
   (callstack-tree-hide-fn [_ flow-id thread-id fn-name fn-ns])
-  (callstack-tree-hidden? [_ flow-id thread-id fn-name fn-ns]))
+  (callstack-tree-hidden? [_ flow-id thread-id fn-name fn-ns])
+  (callstack-tree-item-expanded? [_ flow-id thread-id fn-call-trace-idx])
+  (callstack-tree-expand-calls [_ flow-id thread-id fn-call-trace-indexes])
+  (callstack-tree-collapse-calls [_ flow-id thread-id fn-call-trace-indexes])
+  (callstack-tree-collapse-all-calls [_ flow-id thread-id]))
 
 
 (def dbg-state nil)
@@ -74,9 +78,6 @@
 ;;;;;;;;;;;
 ;; Utils ;;
 ;;;;;;;;;;;
-
-(defn exec-trace? [trace]
-  (instance? ExecTrace trace))
 
 (defrecord DebuggerState [*state]
 
@@ -99,7 +100,8 @@
            {:thread/id thread-id
             :thread/trace-indexer trace-indexer
             :thread/curr-trace-idx nil
-            :thread/callstack-tree-hidden-fns #{}}))
+            :thread/callstack-tree-hidden-fns #{}
+            :thread/callstack-expanded-traces #{}}))
 
   (get-thread [_ flow-id thread-id]
     (get-in @*state [:flows flow-id :flow/threads thread-id]))
@@ -124,7 +126,20 @@
       (contains? hidden-set {:name fn-name :ns fn-ns})))
 
   (increment-trace-counter [_]
-    (swap! *state update :trace-counter inc)))
+    (swap! *state update :trace-counter inc))
+
+  (callstack-tree-item-expanded? [_ flow-id thread-id fn-call-trace-idx]
+    (let [expanded-set (get-in @*state [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces])]
+      (contains? expanded-set fn-call-trace-idx)))
+
+  (callstack-tree-expand-calls [_ flow-id thread-id fn-call-trace-indexes]
+    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces] into fn-call-trace-indexes))
+
+  (callstack-tree-collapse-calls [_ flow-id thread-id fn-call-trace-indexes]
+    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces] (fn [traces] (apply disj traces fn-call-trace-indexes))))
+
+  (callstack-tree-collapse-all-calls [_ flow-id thread-id]
+    (swap! *state assoc-in [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces] #{})))
 
 (defn make-debugger-state []
   (->DebuggerState (atom initial-state

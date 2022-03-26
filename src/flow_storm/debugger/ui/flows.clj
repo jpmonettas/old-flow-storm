@@ -5,9 +5,10 @@
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.form-pprinter :as form-pprinter]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [flow-storm.utils :as utils])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
+           [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
@@ -159,7 +160,7 @@
                       (.setStyle "-fx-font-weight: bold;"))
         args-lbl (Label. (str " " (format-value-short args)))
         node-box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
-        ctx-menu-options [{:text "Goto trace"
+        ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
                            :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
                           {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
                            :on-click #(do
@@ -174,6 +175,27 @@
                                   (.getScreenX ev)
                                   (.getScreenY ev)))))))
 
+(defn- create-tree-search-pane [flow-id thread-id]
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        search-txt (TextField.)
+        search-from-txt (TextField. "0")
+        search-btn (doto (Button. "Search")
+                     (.setOnAction (event-handler
+                                    [_]
+                                    (tap> "Searching")
+                                    (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
+                                    (let [next-match-path (indexer/search-next-fn-call-trace
+                                                           indexer
+                                                           (.getText search-txt)
+                                                           (Integer/parseInt (.getText search-from-txt)))]
+                                      (if next-match-path
+                                        (do
+                                          (tap> (format "Next match at %s" next-match-path))
+                                          (state/callstack-tree-expand-calls dbg-state flow-id thread-id next-match-path)
+                                          (update-call-stack-tree-pane flow-id thread-id))
+                                        (tap> "No match found"))))))]
+    (HBox. (into-array Node [search-txt search-from-txt search-btn]))))
+
 (defn- create-call-stack-tree-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
         update-btn (doto (Button. "Update")
@@ -186,16 +208,35 @@
                            (updateItem [tree-node empty?]
                              (proxy-super updateItem tree-node empty?)
                              (if empty?
+
                                (.setGraphic this nil)
-                               (.setGraphic this (create-call-stack-tree-node
-                                                  (indexer/callstack-node-frame indexer tree-node)
-                                                  flow-id
-                                                  thread-id)))))))
+
+                               (let [frame (indexer/callstack-node-frame indexer tree-node)
+                                     expanded? (state/callstack-tree-item-expanded? dbg-state flow-id thread-id (:call-trace-idx frame))
+                                     tree-item (.getTreeItem this)]
+
+                                 (.setGraphic this (create-call-stack-tree-node
+                                                    frame
+                                                    flow-id
+                                                    thread-id))
+                                 (doto tree-item
+                                   (.addEventHandler (TreeItem/branchCollapsedEvent)
+                                                     (event-handler
+                                                      [ev]
+                                                      (when (= (.getTreeItem ev) tree-item)
+                                                        (state/callstack-tree-collapse-calls dbg-state flow-id thread-id #{(:call-trace-idx frame)}))))
+                                   (.addEventHandler (TreeItem/branchExpandedEvent)
+                                                     (event-handler
+                                                      [ev]
+                                                      (when (= (.getTreeItem ev) tree-item)
+                                                        (state/callstack-tree-expand-calls dbg-state flow-id thread-id #{(:call-trace-idx frame)}))))
+                                   (.setExpanded expanded?))))))))
+        search-pane (create-tree-search-pane flow-id thread-id)
         tree-view (doto (TreeView.)
                     (.setEditable false)
                     (.setCellFactory cell-factory))]
     (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
-    (VBox. (into-array Node [update-btn tree-view]))))
+    (VBox. (into-array Node [update-btn search-pane tree-view]))))
 
 
 (defn- highlight-executing [^Text token-text]
@@ -335,7 +376,7 @@
                   (highlight-interesting text))))))
 
         ;; "unhighlight" prev executing tokens
-        (when (and (state/exec-trace? curr-trace))
+        (when (and (utils/exec-trace? curr-trace))
           (let [curr-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                                (:form-id curr-trace)
                                                                                (:coor curr-trace)))]
@@ -345,7 +386,7 @@
                 (un-highlight text)))))
 
         ;; highlight executing tokens
-        (when (state/exec-trace? next-trace)
+        (when (utils/exec-trace? next-trace)
           (let [next-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
                                                                                (:form-id next-trace)
                                                                                (:coor next-trace)))]
