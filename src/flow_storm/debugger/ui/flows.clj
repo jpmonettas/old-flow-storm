@@ -6,9 +6,10 @@
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.form-pprinter :as form-pprinter]
             [clojure.string :as str]
-            [flow-storm.utils :as utils])
+            [flow-storm.utils :as utils]
+            [flow-storm.debugger.target-commands :as target-commands])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button Label ListView ListCell ScrollPane TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
+           [javafx.scene.control Button CheckBox Label ListView ListCell ScrollPane TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
@@ -35,17 +36,38 @@
     (cond-> (subs s 0 (min max-len len))
       (> len max-len) (str " ... "))))
 
+(defn remove-flow [flow-id]
+  (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")
+        [flow-tab] (obj-lookup flow-id "flow_tab")]
+
+    (when flow-tab
+      ;; remove the tab from flows_tabs_pane
+      (-> flows-tabs-pane
+          .getTabs
+          (.remove flow-tab)))
+
+
+    ;; clean ui state vars
+    (state-vars/clean-flow-objs flow-id)))
+
 (defn create-empty-flow [flow-id]
-  (run-now
-   (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")
-         threads-tab-pane (doto (TabPane.)
-                            (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
-         _ (store-obj flow-id "threads_tabs_pane" threads-tab-pane)
-         flow-tab (doto (Tab. (str "flow-" flow-id))
-                    (.setContent threads-tab-pane))]
-     (-> flows-tabs-pane
-         .getTabs
-         (.addAll [flow-tab])))))
+  (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")
+        threads-tab-pane (doto (TabPane.)
+                           (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
+        _ (store-obj flow-id "threads_tabs_pane" threads-tab-pane)
+        flow-tab (doto (Tab. (str "flow-" flow-id))
+                   (.setOnCloseRequest (event-handler
+                                        [ev]
+                                        (state/remove-flow dbg-state flow-id)
+                                        (remove-flow flow-id)
+                                        ;; since we are destroying this tab, we don't need
+                                        ;; this event to propagate anymore
+                                        (.consume ev)))
+                   (.setContent threads-tab-pane))]
+    (store-obj flow-id "flow_tab" flow-tab)
+    (-> flows-tabs-pane
+        .getTabs
+        (.addAll [flow-tab]))))
 
 (defn- create-forms-pane [flow-id thread-id]
   (let [box (doto (VBox.)
@@ -85,20 +107,60 @@
 
     tools-tab-pane))
 
+(defn create-list-cell-factory [update-item-fn]
+  (proxy [ListCell] []
+    (updateItem [item empty?]
+      (proxy-super updateItem item empty?)
+      (if empty?
+        (.setGraphic ^Node this nil)
+        (update-item-fn this item)))))
+
+(defn- create-instrument-pane [flow-id thread-id]
+  (let [observable-bindings-list (FXCollections/observableArrayList)
+        cell-factory (proxy [javafx.util.Callback] []
+                       (call [lv]
+                         (create-list-cell-factory
+                          (fn [list-cell [[fn-ns fn-name] cnt :as entry]]
+                            (let [fn-lbl (doto (Label. (format "%s/%s" fn-ns fn-name))
+                                           (.setPrefWidth 300))
+                                  cnt-lbl (doto (Label. (str cnt))
+                                            (.setPrefWidth 100))
+                                  inst-check (CheckBox.)
+                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl inst-check]))]
+                              (doto inst-check
+                                (.setSelected true)
+                                (.setOnAction (event-handler
+                                               [_]
+                                               (if (.isSelected inst-check)
+                                                 (target-commands/run-command :instrument-fn (symbol fn-ns fn-name) {})
+                                                 (target-commands/run-command :uninstrument-fn (symbol fn-ns fn-name))))))
+                              (.setGraphic ^Node list-cell hbox))))))
+        instrument-list-view (doto (ListView. observable-bindings-list)
+                               (.setEditable false)
+                               (.setCellFactory cell-factory))]
+    (store-obj flow-id (state-vars/thread-instrument-list-id thread-id) observable-bindings-list)
+    instrument-list-view))
+
+(defn- update-instrument-pane [flow-id thread-id]
+  (let [fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
+                           (map (fn [[fn-vec cnt]]
+                                  [fn-vec cnt]))
+                           (sort-by second >))
+        [^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-instrument-list-id thread-id))]
+    (.clear observable-bindings-list)
+    (.addAll observable-bindings-list (into-array Object fn-call-stats))))
+
 (defn- create-locals-pane [flow-id thread-id]
   (let [observable-bindings-list (FXCollections/observableArrayList)
         cell-factory (proxy [javafx.util.Callback] []
                        (call [lv]
-                         (proxy [ListCell] []
-                           (updateItem [symb-val empty?]
-                             (proxy-super updateItem symb-val empty?)
-                             (if empty?
-                               (.setGraphic ^Node this nil)
-                               (let [symb-lbl (doto (Label. (first symb-val))
-                                                (.setPrefWidth 100))
-                                     val-lbl (Label.  (format-value-short (second symb-val)))
-                                     hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
-                                 (.setGraphic ^Node this hbox)))))))
+                         (create-list-cell-factory
+                          (fn [list-cell symb-val]
+                            (let [symb-lbl (doto (Label. (first symb-val))
+                                             (.setPrefWidth 100))
+                                  val-lbl (Label.  (format-value-short (second symb-val)))
+                                  hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
+                              (.setGraphic ^Node list-cell hbox))))))
         locals-list-view (doto (ListView. observable-bindings-list)
                            (.setEditable false)
                            (.setCellFactory cell-factory))]
@@ -107,6 +169,7 @@
 
 (defn- update-locals-pane [flow-id thread-id bindings]
   (let [[^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
+    (tap> (format "TODO FIX BINDINGS %s" bindings))
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object bindings))))
 
@@ -418,9 +481,14 @@
                                   [ev]
                                   (jump-to-coord flow-id
                                                  thread-id
-                                                 (inc (state/current-trace-idx dbg-state flow-id thread-id))))))]
+                                                 (inc (state/current-trace-idx dbg-state flow-id thread-id))))))
+        re-run-flow-btn (doto (Button. "Re run flow")
+                          (.setOnAction (event-handler
+                                         [_]
+                                         (let [{:keys [flow/execution-expr]} (state/get-flow dbg-state flow-id)]
+                                           (target-commands/run-command :re-run-flow flow-id execution-expr)))))]
 
-    (doto (HBox. (into-array Node [prev-btn curr-trace-lbl separator-lbl thread-trace-count-lbl next-btn]))
+    (doto (HBox. (into-array Node [prev-btn curr-trace-lbl separator-lbl thread-trace-count-lbl next-btn re-run-flow-btn]))
       (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;"))))
 
 (defn- create-thread-pane [flow-id thread-id]
@@ -433,7 +501,10 @@
                    (.setContent (create-code-pane flow-id thread-id)))
         callstack-tree-tab (doto (Tab. "Call stack")
                              (.setContent (create-call-stack-tree-pane flow-id thread-id))
-                             (.setOnSelectionChanged (event-handler [_] (update-call-stack-tree-pane flow-id thread-id))))]
+                             (.setOnSelectionChanged (event-handler [_] (update-call-stack-tree-pane flow-id thread-id))))
+        instrument-tab (doto (Tab. "Instrument")
+                             (.setContent (create-instrument-pane flow-id thread-id))
+                             (.setOnSelectionChanged (event-handler [_] (update-instrument-pane flow-id thread-id))))]
 
     ;; make thread-tools-tab-pane take the full height
     (-> thread-tools-tab-pane
@@ -442,7 +513,7 @@
 
     (-> thread-tools-tab-pane
         .getTabs
-        (.addAll [code-tab callstack-tree-tab]))
+        (.addAll [code-tab callstack-tree-tab instrument-tab]))
 
     (-> thread-pane
         .getChildren
@@ -463,6 +534,6 @@
 (defn main-pane []
 
   (let [tab-pane (doto (TabPane.) ;;TODO: make flows closable
-                   (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))]
+                   (.setTabClosingPolicy TabPane$TabClosingPolicy/ALL_TABS))]
     (store-obj "flows_tabs_pane" tab-pane)
     tab-pane))

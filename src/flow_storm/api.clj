@@ -9,7 +9,8 @@
             [clojure.pprint :as pp]
             [cljs.main :as cljs-main]
             [clojure.repl :as clj.repl]
-            [cljs.repl :as cljs.repl]))
+            [cljs.repl :as cljs.repl]
+            [clojure.instant :as inst]))
 
 (def start-debugger dbg-main/start-debugger)
 
@@ -67,34 +68,29 @@
 
      inst-code)))
 
-#_(defmacro trace-var [var-symb]
-  (binding [inst-forms/*environment* &env]
-    (let [compiler (inst-forms/target-from-env &env)
-          form (some-> (case compiler
-                         :clj  (clj.repl/source-fn var-symb)
-                         :cljs (cljs.repl/source-fn &env var-symb))
-                       read-string)]
-      (if form
-        (let [ctx (initial-ctx form &env)
-              inst-code (-> form
-                            (inst-forms/instrument-all ctx)
-                            (inst-forms/redefine-vars var-symb form ctx))]
-          inst-code)
+(defn trace-var [var-symb config]
+  (let [form (some-> (clj.repl/source-fn var-symb)
+                     read-string)]
+    (if form
 
-        (println "Couldn't find source for " var-symb)))))
+      (inst-ns/trace-form (find-ns (symbol (namespace var-symb))) form config)
 
-#_(defmacro untrace-var [var-symb]
-  (let [compiler (inst-forms/target-from-env &env)
-        var-ns (when-let [vns (namespace var-symb)] (symbol vns))]
-    (case compiler
-      :clj `(let [current-ns# (ns-name *ns*)]
-              (in-ns (quote ~var-ns))
-              (alter-var-root (var ~var-symb) (constantly (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb))))
-              (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb))
-              (in-ns current-ns#))
-      :cljs `(do
-               (set! ~var-symb (get @flow-storm.api/traced-vars-orig-fns (quote ~var-symb)))
-               (swap! flow-storm.api/traced-vars-orig-fns dissoc (quote ~var-symb))))))
+      (println "Couldn't find source for " var-symb))))
+
+(defn untrace-var [var-symb]
+  (let [form (some->> (clj.repl/source-fn var-symb)
+                      (read-string {:read-cond :allow}))
+        expanded-form (inst-forms/macroexpand-all macroexpand-1 form ::original-form)]
+    (if form
+
+      (if (inst-forms/expanded-def-form? expanded-form)
+        (let [ns-name (namespace var-symb)
+              [v vval] (inst-ns/expanded-defn-parse ns-name expanded-form)]
+          (binding [*ns* (find-ns (symbol ns-name))]
+            (alter-var-root v (fn [_] (eval vval)))))
+        (tap> (format "Don't know howto untrace %s" (pr-str expanded-form))))
+
+      (println "Couldn't find source for " var-symb))))
 
 (def trace-files-for-namespaces inst-ns/trace-files-for-namespaces)
 
@@ -105,14 +101,20 @@
   `(flow-storm.api/trace 0 ~form))
 
 (defmacro run-with-execution-ctx
-  [{:keys [print-length print-level flow-id]} form]
-  `(do
+  [{:keys [orig-form ns flow-id]} form]
+  `(let [flow-id# ~(or flow-id 0)
+         curr-ns# ~(or ns `(str (ns-name *ns*)))]
      (alter-var-root #'tracer/*init-traced-forms* (constantly (atom #{})))
-     (alter-var-root #'tracer/*flow-id* (constantly (or ~flow-id 0)))
-     ~form)
-  #_`(binding [tracer/*init-traced-forms* (atom #{})
-             tracer/*flow-id* (or flow-id 0)]
+     (alter-var-root #'tracer/*flow-id* (constantly flow-id#))
+     (tracer/trace-flow-init-trace flow-id# curr-ns# ~(or orig-form (list 'quote form)))
      ~form))
+
+(defn re-run-flow [flow-id {:keys [ns form]}]
+  (binding [*ns* (find-ns (symbol ns))]
+    (run-with-execution-ctx
+     {:flow-id flow-id
+      :orig-form form}
+     (eval form))))
 
 (comment
 

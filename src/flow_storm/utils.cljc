@@ -1,6 +1,6 @@
 (ns flow-storm.utils
   (:require [flow-storm.tracer])
-  (:import [flow_storm.tracer InitTrace BindTrace FnCallTrace ExecTrace]))
+  (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
 
 (defn colored-string [s c]
   (let [color {:red 31

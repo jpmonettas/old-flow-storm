@@ -655,11 +655,11 @@
 
 (defn build-form-instrumentation-ctx [{:keys [disable]} form-ns form env]
   (let [form-id (hash form)]
-    (assert (set? disable) ":disable configuration should be a set")
+    (assert (or (nil? disable) (set? disable)) ":disable configuration should be a set")
     {:on-expr-exec-fn       'flow-storm.tracer/trace-expr-exec-trace
      :on-bind-fn            'flow-storm.tracer/trace-bound-trace
      :on-fn-call-fn         'flow-storm.tracer/trace-fn-call-trace
-     :on-outer-form-init-fn 'flow-storm.tracer/trace-init-trace
+     :on-outer-form-init-fn 'flow-storm.tracer/trace-form-init-trace
      :environment      env
      :compiler         (if (contains? env :js-globals)
                          :cljs

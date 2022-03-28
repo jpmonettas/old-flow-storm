@@ -1,7 +1,7 @@
 (ns flow-storm.debugger.state
   (:require [clojure.spec.alpha :as s]
             [flow-storm.tracer])
-  (:import [flow_storm.tracer InitTrace BindTrace FnCallTrace ExecTrace]))
+  (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
 
 
 ;; (s/def :thread/form (s/keys :req [:form/id
@@ -48,7 +48,7 @@
 ;;                                 :state/trace-counter]))
 
 (defprotocol FlowStore
-  (create-flow [_ flow-id timestamp])
+  (create-flow [_ flow-id exec-form-ns exec-form timestamp])
   (remove-flow [_ flow-id])
   (get-flow [_ flow-id]))
 
@@ -57,7 +57,9 @@
   (get-thread [_ flow-id thread-id])
   (thread-trace-indexer [_ flow-id thread-id])
   (current-trace-idx [_ flow-id thread-id])
-  (set-trace-idx [_ flow-id thread-id idx]))
+  (set-trace-idx [_ flow-id thread-id idx])
+  (update-fn-call-stats [_ flow-id thread-id fn-call-trace])
+  (fn-call-stats [_ flow-id thread-id]))
 
 (defprotocol UIState
   (increment-trace-counter [_])
@@ -83,12 +85,17 @@
 
   FlowStore
 
-  (create-flow [_ flow-id timestamp]
+  (create-flow [_ flow-id exec-form-ns exec-form timestamp]
+    ;; if a flow for `flow-id` already exist we discard it and
+    ;; will be GCed
     (swap! *state assoc-in [:flows flow-id] {:flow/id flow-id
                                              :flow/threads {}
+                                             :flow/execution-expr {:ns exec-form-ns
+                                                                   :form exec-form}
                                              :timestamp timestamp}))
 
-  (remove-flow [_ flow-id])
+  (remove-flow [_ flow-id]
+    (swap! *state update :flows dissoc flow-id))
 
   (get-flow [_ flow-id]
     (get-in @*state [:flows flow-id]))
@@ -101,7 +108,8 @@
             :thread/trace-indexer trace-indexer
             :thread/curr-trace-idx nil
             :thread/callstack-tree-hidden-fns #{}
-            :thread/callstack-expanded-traces #{}}))
+            :thread/callstack-expanded-traces #{}
+            :thread/fn-call-stats {}}))
 
   (get-thread [_ flow-id thread-id]
     (get-in @*state [:flows flow-id :flow/threads thread-id]))
@@ -114,6 +122,12 @@
 
   (set-trace-idx [_ flow-id thread-id idx]
     (swap! *state assoc-in [:flows flow-id :flow/threads thread-id :thread/curr-trace-idx] idx))
+
+  (update-fn-call-stats [_ flow-id thread-id {:keys [fn-ns fn-name]}]
+    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/fn-call-stats [fn-ns fn-name]] (fnil inc 0)))
+
+  (fn-call-stats [_ flow-id thread-id]
+    (get-in @*state [:flows flow-id :flow/threads thread-id :thread/fn-call-stats]))
 
 
   UIState

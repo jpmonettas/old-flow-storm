@@ -8,7 +8,7 @@
             [flow-storm.debugger.trace-indexer.mutable.impl :as mut-trace-indexer]
             [clojure.pprint :as pp]
             flow-storm.tracer)
-  (:import [flow_storm.tracer InitTrace ExecTrace FnCallTrace BindTrace]))
+  (:import [flow_storm.tracer FlowInitTrace FormInitTrace ExecTrace FnCallTrace BindTrace]))
 
 (defprotocol ProcessTrace
   (process [_]))
@@ -29,10 +29,16 @@
    (ui-flows/highlight-form flow-id thread-id form-id)))
 
 (extend-protocol ProcessTrace
-  InitTrace
+  FlowInitTrace
+  (process [{:keys [flow-id form-ns form timestamp]}]
+    (state/create-flow dbg-state flow-id form-ns form timestamp)
+    (ui-utils/run-now (ui-flows/remove-flow flow-id))
+    (ui-utils/run-now (ui-flows/create-empty-flow flow-id)))
+
+  FormInitTrace
   (process [{:keys [flow-id form-id thread-id form ns timestamp] :as t}]
     ;; if flow doesn't exist, create one
-    (when-not (state/get-flow dbg-state flow-id)
+    #_(when-not (state/get-flow dbg-state flow-id)
       (state/create-flow dbg-state flow-id timestamp)
       (ui-flows/create-empty-flow flow-id))
 
@@ -62,6 +68,8 @@
   FnCallTrace
   (process [{:keys [flow-id thread-id form-id] :as trace}]
     (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)]
+
+      (state/update-fn-call-stats dbg-state flow-id thread-id trace)
 
       (when (zero? (indexer/thread-exec-count indexer))
         (first-exec-trace-init flow-id thread-id form-id))

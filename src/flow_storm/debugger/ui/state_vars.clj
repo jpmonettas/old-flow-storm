@@ -51,7 +51,7 @@
      objs)))
 
 (defn clean-flow-objs [flow-id]
-  (update flows-ui-objs dissoc flow-id))
+  (swap! flows-ui-objs dissoc flow-id))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Functions for creating ui components ids ;;
@@ -59,6 +59,9 @@
 
 (defn form-token-id [thread-id form-id coord]
   (format "form_token_%d_%d_%s" thread-id form-id (hash coord)))
+
+(defn flow-tab-id [flow-id]
+  (format "flow_tab_%d" flow-id))
 
 (defn thread-curr-trace-lbl-id [thread-id]
   (format "thread_curr_trace_lbl_%d" thread-id))
@@ -80,6 +83,9 @@
 
 (defn thread-locals-list-id [thread-id]
   (format "locals_list_%d" thread-id))
+
+(defn thread-instrument-list-id [thread-id]
+  (format "instrument_list_%d" thread-id))
 
 (defn thread-callstack-tree-view-id [thread-id]
   (format "callstack_tree_view_%s" thread-id))

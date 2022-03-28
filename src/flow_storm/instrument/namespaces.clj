@@ -57,8 +57,14 @@
             kind (inst-forms/expanded-form-type macro-expanded-form {:compiler :clj})]
         (not (contains? #{:defn :defmethod :extend-type :extend-protocol} kind)))))
 
+(defn expanded-defn-parse [ns-name expanded-defn-form]
+  (let [[_ var-name var-val] expanded-defn-form
+        var-symb (symbol ns-name (str var-name))]
+    [(find-var var-symb) var-val]))
+
 (defn trace-form [ns form config]
   (let [ctx (inst-forms/build-form-instrumentation-ctx config (str (ns-name ns)) form nil)
+
         inst-form (try
                     (-> form
                         (inst-forms/instrument-all ctx)
@@ -67,7 +73,10 @@
                       (throw (ex-info "Error instrumenting form" {:type :unknown-error}))))]
 
     (try
-      (eval inst-form)
+      (if (inst-forms/expanded-def-form? inst-form)
+        (let [[v vval] (expanded-defn-parse (str (ns-name ns)) inst-form)]
+          (alter-var-root v (fn [_] (eval vval))))
+        (eval inst-form))
       (catch Exception e
         (let [e-msg (.getMessage e)
               ex-type (cond

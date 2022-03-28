@@ -5,35 +5,8 @@
             [flow-storm.tracer :as tracer]
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.pprint :as pp]
-            [clj-async-profiler.core :as prof]))
-
-;;;;;;;;;;;;;;;;;;;;;;;
-;; Some testing code ;;
-;;;;;;;;;;;;;;;;;;;;;;;
-
-(fs-api/trace
- {:flow-id 0 :disable #{}}
- (defn annoying-fn [n]
-   (+ n n)))
-
-(fs-api/trace
- {:flow-id 0 :disable #{}}
- (defn factorial [n]
-   (annoying-fn n)
-   (if (zero? n)
-     1
-     (* n (factorial (dec n))))))
-
-
-(fs-api/trace
- {:flow-id 0 :disable #{}}
- (defn boo [xs]
-   (reduce + (map factorial xs))))
-
-(defn run-some-traced []
-  (fs-api/run-with-execution-ctx
-   {}
-   (boo [2 3 4])))
+            [clj-async-profiler.core :as prof]
+            [dev-tester]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Utilities for reloading everything ;;
@@ -44,8 +17,15 @@
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue
   (fs-api/local-connect)
 
+  (fs-api/trace-files-for-namespaces #{"dev-tester"}
+                                     {})
+
   ;; add some data for dev
-  (run-some-traced))
+  (fs-api/run-with-execution-ctx
+   {:flow-id 0
+    :ns "dev"}
+   (dev-tester/boo [2]))
+  )
 
 (defn local-restart-everything []
   (tracer/stop-send-thread)
