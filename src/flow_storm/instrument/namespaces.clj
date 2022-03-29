@@ -6,11 +6,11 @@
             [flow-storm.utils :as utils])
   (:import [java.io PushbackReader]))
 
-(defn all-ns-with-prefixes [prefixes {:keys [excluding]}]
+(defn all-ns-with-prefixes [prefixes {:keys [excluding-ns]}]
   (->> (all-ns)
        (keep (fn [ns]
                (let [nsname (str (ns-name ns))]
-                 (when (and (not (excluding nsname))
+                 (when (and (not (excluding-ns nsname))
                             (some (fn [prefix]
                                     (str/starts-with? nsname prefix))
                                   prefixes))
@@ -146,7 +146,7 @@
 
 (defn trace-files-for-namespaces [prefixes config]
   (let [config (-> config
-                   (update :excluding #(or % #{}))
+                   (update :excluding-ns #(or % #{}))
                    (update :disable #(or % #{})))
         ns-set (all-ns-with-prefixes prefixes config)
         files-set (interesting-files-for-namespaces ns-set)]

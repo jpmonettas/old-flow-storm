@@ -195,7 +195,7 @@
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
-  [[name & args :as form] {:keys [orig-outer-form form-id form-ns on-outer-form-init-fn on-fn-call-fn disable] :as ctx}]
+  [[name & args :as form] {:keys [orig-outer-form form-id form-ns on-outer-form-init-fn on-fn-call-fn disable excluding-fns] :as ctx}]
   (cons name
         ;; We're dealing with some low level stuff here, and some of
         ;; these internal forms are completely undocumented, so let's
@@ -276,20 +276,26 @@
                                                                              (dissoc :defn-def))
 
                                                                     lazy-seq-fn? (lazy-seq-form? (first arity-body-forms))
-
-                                                                    inst-arity-body (if lazy-seq-fn?
+                                                                    inst-arity-body (if (or (and (disable :anonymous-fn) (not defn-def))
+                                                                                            (excluding-fns (symbol form-ns (str fn-name)))
+                                                                                            lazy-seq-fn?)
+                                                                                      ;; SKIP instrumentation
+                                                                                      ;;
                                                                                       ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
                                                                                       ;; recursion and we risk getting a StackOverflow.
                                                                                       ;; If we can't wrap the output we can't wrap the call neither since
                                                                                       ;; they are sinchronized, so we skip this fn* body tracing
                                                                                       (do
-                                                                                        (println (format "Warning skipping fn* body instrumentation on (%s) because it returns a lazy-seq" form-ns))
-                                                                                        (first arity-body-forms))
+
+                                                                                        (when lazy-seq-fn?
+                                                                                          (println (format "Warning skipping fn* body instrumentation on (%s) because it returns a lazy-seq" form-ns)))
+
+                                                                                        arity-body-forms)
 
                                                                                       (instrument-outer-forms ctx'
                                                                                                               (instrument-coll arity-body-forms ctx')
                                                                                                               outer-preamble))]
-                                                                (-> `(~arity-args-vec ~inst-arity-body)
+                                                                (-> `(~arity-args-vec ~@inst-arity-body)
                                                                     (merge-meta (meta arity)))))
                                [fn-name arities-bodies-seq] (cond
 
@@ -629,10 +635,8 @@
 (defn instrument-outer-forms
   "Add some special instrumentation that is needed only on the outer form."
   [{:keys [orig-form args-vec fn-name form-ns form-id on-fn-call-fn] :as ctx} forms preamble]
-  `(do
-     ~@preamble
-
-     ~(instrument-form (conj forms 'do) [] (assoc ctx :outer-form? true))))
+  (-> preamble
+      (into [(instrument-form (conj forms 'do) [] (assoc ctx :outer-form? true))])))
 
 ;;;;;;;;;;;;;;;;
 ;; @@@ Hacky  ;;
@@ -653,7 +657,7 @@
         inst-code (instrument-tagged-code macro-expanded-form ctx)]
     inst-code))
 
-(defn build-form-instrumentation-ctx [{:keys [disable]} form-ns form env]
+(defn build-form-instrumentation-ctx [{:keys [disable excluding-fns]} form-ns form env]
   (let [form-id (hash form)]
     (assert (or (nil? disable) (set? disable)) ":disable configuration should be a set")
     {:on-expr-exec-fn       'flow-storm.tracer/trace-expr-exec-trace
@@ -667,7 +671,8 @@
      :orig-outer-form  form
      :form-id          form-id
      :form-ns          form-ns
-     :disable          (or disable #{}) ;; :expr :binding
+     :excluding-fns     (or excluding-fns #{})
+     :disable          (or disable #{}) ;; :expr :binding :anonymous-fn
      }))
 ;; ClojureScript multi arity defn expansion is much more involved than
 ;; a clojure one
