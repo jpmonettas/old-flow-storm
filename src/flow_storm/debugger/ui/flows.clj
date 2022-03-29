@@ -9,13 +9,14 @@
             [flow-storm.utils :as utils]
             [flow-storm.debugger.target-commands :as target-commands])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button CheckBox Label ListView ListCell ScrollPane TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
+           [javafx.scene.control Button CheckBox Label ListView ListCell ScrollPane SelectionMode
+            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene Node]
            [javafx.scene.paint Color]
            [javafx.geometry Insets Side Orientation Pos]
            [javafx.collections FXCollections ObservableList]
-           [javafx.scene.input MouseEvent]))
+           [javafx.scene.input MouseEvent MouseButton]))
 
 (declare jump-to-coord)
 
@@ -125,9 +126,9 @@
                                            (.setPrefWidth 300))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))
-                                  inst-check (CheckBox.)
-                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl inst-check]))]
-                              (doto inst-check
+                                  ;;inst-check (CheckBox.)
+                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl #_inst-check]))]
+                              #_(doto inst-check
                                 (.setSelected true)
                                 (.setOnAction (event-handler
                                                [_]
@@ -137,7 +138,27 @@
                               (.setGraphic ^Node list-cell hbox))))))
         instrument-list-view (doto (ListView. observable-bindings-list)
                                (.setEditable false)
-                               (.setCellFactory cell-factory))]
+                               (.setCellFactory cell-factory))
+        instrument-list-selection (.getSelectionModel instrument-list-view)
+        ctx-menu-options [{:text "Un-instrument seleced functions"
+                           :on-click (fn []
+                                       (let [vars-symbs (->> (.getSelectedItems instrument-list-selection)
+                                                             (map (fn [[[fn-ns fn-name] _]]
+                                                                    (symbol fn-ns fn-name))))]
+                                         (target-commands/run-command :uninstrument-fn-bulk vars-symbs)))}]
+        ctx-menu (ui-utils/make-context-menu ctx-menu-options)
+        ]
+
+    (.setOnMouseClicked instrument-list-view
+                        (event-handler
+                         [mev]
+                         (when (= MouseButton/SECONDARY (.getButton mev))
+                           (.show ctx-menu
+                                  instrument-list-view
+                                  (.getScreenX mev)
+                                  (.getScreenY mev)))))
+
+    (.setSelectionMode instrument-list-selection SelectionMode/MULTIPLE)
     (store-obj flow-id (state-vars/thread-instrument-list-id thread-id) observable-bindings-list)
     instrument-list-view))
 

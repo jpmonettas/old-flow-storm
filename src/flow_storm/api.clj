@@ -78,19 +78,25 @@
       (println "Couldn't find source for " var-symb))))
 
 (defn untrace-var [var-symb]
-  (let [form (some->> (clj.repl/source-fn var-symb)
-                      (read-string {:read-cond :allow}))
-        expanded-form (inst-forms/macroexpand-all macroexpand-1 form ::original-form)]
-    (if form
+  (let [ns-name (namespace var-symb)]
+    (binding [*ns* (find-ns (symbol ns-name))]
+      (let [form (some->> (clj.repl/source-fn var-symb)
+                          (read-string {:read-cond :allow}))
+            expanded-form (inst-forms/macroexpand-all macroexpand-1 form ::original-form)]
+        (if form
 
-      (if (inst-forms/expanded-def-form? expanded-form)
-        (let [ns-name (namespace var-symb)
-              [v vval] (inst-ns/expanded-defn-parse ns-name expanded-form)]
-          (binding [*ns* (find-ns (symbol ns-name))]
-            (alter-var-root v (fn [_] (eval vval)))))
-        (tap> (format "Don't know howto untrace %s" (pr-str expanded-form))))
+          (if (inst-forms/expanded-def-form? expanded-form)
+            (let [[v vval] (inst-ns/expanded-defn-parse ns-name expanded-form)]
+              (alter-var-root v (fn [_] (eval vval)))
+              (tap> (format "Untraced %s" v)))
 
-      (println "Couldn't find source for " var-symb))))
+            (tap> (format "Don't know howto untrace %s" (pr-str expanded-form))))
+
+          (println "Couldn't find source for " var-symb))))))
+
+(defn untrace-vars [vars-symbs]
+  (doseq [var-symb vars-symbs]
+    (untrace-var var-symb)))
 
 (def trace-files-for-namespaces inst-ns/trace-files-for-namespaces)
 
