@@ -242,22 +242,27 @@
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
         search-txt (TextField.)
         search-from-txt (TextField. "0")
+        search-lvl-txt (TextField. "1")
         search-btn (doto (Button. "Search")
                      (.setOnAction (event-handler
                                     [_]
                                     (tap> "Searching")
                                     (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
-                                    (let [next-match-path (indexer/search-next-fn-call-trace
-                                                           indexer
-                                                           (.getText search-txt)
-                                                           (Integer/parseInt (.getText search-from-txt)))]
+                                    (let [next-match-path (binding [clojure.core/*print-level* (Integer/parseInt (.getText search-lvl-txt))]
+                                                            (indexer/search-next-fn-call-trace
+                                                             indexer
+                                                             (.getText search-txt)
+                                                             (Integer/parseInt (.getText search-from-txt))))]
                                       (if next-match-path
                                         (do
                                           (tap> (format "Next match at %s" next-match-path))
                                           (state/callstack-tree-expand-calls dbg-state flow-id thread-id next-match-path)
                                           (update-call-stack-tree-pane flow-id thread-id))
                                         (tap> "No match found"))))))]
-    (HBox. (into-array Node [search-txt search-from-txt search-btn]))))
+    (HBox. (into-array Node [(Label. "Search: ") search-txt
+                             (Label. "From: ")   search-from-txt
+                             (Label. "Args print level : ") search-lvl-txt
+                             search-btn]))))
 
 (defn- create-call-stack-tree-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
