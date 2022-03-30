@@ -16,10 +16,11 @@
   (thread-exec-count [_]
     (.size traces))
 
-  (add-form [_ form-id form-ns form]
+  (add-form [_ form-id form-ns def-kind form]
     (.put forms form-id {:form/id form-id
                          :form/ns form-ns
-                         :form/form form}))
+                         :form/form form
+                         :form/def-kind def-kind}))
 
   (get-form [_ form-id]
     (.get forms form-id))

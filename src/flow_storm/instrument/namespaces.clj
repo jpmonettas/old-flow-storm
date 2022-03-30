@@ -71,13 +71,14 @@
                         (inst-forms/maybe-unwrap-outer-form-instrumentation ctx))
                     (catch Exception e
                       (throw (ex-info "Error instrumenting form" {:type :unknown-error}))))]
-
     (try
       (if (inst-forms/expanded-def-form? inst-form)
         (let [[v vval] (expanded-defn-parse (str (ns-name ns)) inst-form)]
           (alter-var-root v (fn [_] (eval vval))))
         (eval inst-form))
       (catch Exception e
+        #_(tap> (pr-str inst-form))
+        (tap> e)
         (let [e-msg (.getMessage e)
               ex-type (cond
 

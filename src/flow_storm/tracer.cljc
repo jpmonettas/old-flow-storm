@@ -17,7 +17,7 @@
 (def ^:dynamic *init-traced-forms* nil)
 
 (defrecord FlowInitTrace [flow-id form-ns form timestamp])
-(defrecord FormInitTrace [flow-id form-id thread-id form ns timestamp])
+(defrecord FormInitTrace [flow-id form-id thread-id form ns def-kind timestamp])
 (defrecord ExecTrace [flow-id form-id coor thread-id result outer-form?])
 (defrecord FnCallTrace [flow-id form-id fn-name fn-ns thread-id args-vec timestamp])
 (defrecord BindTrace [flow-id form-id coor thread-id timestamp symbol value])
@@ -46,15 +46,16 @@
 
 (defn trace-form-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id args-vec fn-name ns]} form]  
+  [{:keys [form-id args-vec fn-name ns def-kind]} form]  
   (let [thread-id (.getId (Thread/currentThread))]
     (when-not (contains? @*init-traced-forms* [*flow-id* thread-id form-id])
       (let [trace (map->FormInitTrace {:flow-id *flow-id*
-                                   :form-id form-id
-                                   :thread-id thread-id
-                                   :form form
-                                   :ns ns
-                                   :timestamp (get-timestamp)})]      
+                                       :form-id form-id
+                                       :thread-id thread-id
+                                       :form form
+                                       :ns ns
+                                       :def-kind def-kind
+                                       :timestamp (get-timestamp)})]
         (.put trace-queue trace)
         (swap! *init-traced-forms* conj [*flow-id* thread-id form-id])))))
 

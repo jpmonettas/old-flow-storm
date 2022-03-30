@@ -36,7 +36,7 @@
     (ui-utils/run-now (ui-flows/create-empty-flow flow-id)))
 
   FormInitTrace
-  (process [{:keys [flow-id form-id thread-id form ns timestamp] :as t}]
+  (process [{:keys [flow-id form-id thread-id form ns def-kind timestamp] :as t}]
     ;; if flow doesn't exist, create one
     #_(when-not (state/get-flow dbg-state flow-id)
       (state/create-flow dbg-state flow-id timestamp)
@@ -54,6 +54,7 @@
     (indexer/add-form (state/thread-trace-indexer dbg-state flow-id thread-id)
                       form-id
                       ns
+                      def-kind
                       form))
 
   ExecTrace

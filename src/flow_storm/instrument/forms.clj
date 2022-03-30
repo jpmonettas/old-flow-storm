@@ -265,7 +265,8 @@
                                                               (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
                                                                     outer-preamble (-> []
                                                                                        (into [`(~on-outer-form-init-fn {:form-id ~form-id
-                                                                                                                        :ns ~form-ns}
+                                                                                                                        :ns ~form-ns
+                                                                                                                        :def-kind ~(:kind defn-def)}
                                                                                                 (quote ~orig-outer-form)
                                                                                                 )])
                                                                                        (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
@@ -473,18 +474,28 @@
     inst-form))
 
 (defn- instrument-core-extend-form [[_ ext-type & exts :as form] ctx]
-  (let [extensions (->> (partition 2 exts)
-                        (mapcat (fn [[etype emap]]
-                                  (let [inst-emap (reduce-kv
-                                                   (fn [r k f]
-                                                     (assoc r k (instrument f
-                                                                            (assoc ctx :defn-def {:fn-name nil ;; this will add gensym fn-name
-                                                                                                  :orig-form (or
-                                                                                                              (-> ctx :defn-def :orig-form)
-                                                                                                              (::original-form (meta form)))}))))
-                                                   {}
-                                                   emap)]
-                                    (list etype inst-emap)))))]
+  (let [inst-ext (fn [[etype emap]]
+                   (let [inst-emap (reduce-kv
+                                    (fn [r k f]
+                                      ;; This ' is needed in `fn-name` because it will end up
+                                      ;; in (fn* fn-name ([])) functions entry of extend-type after instrumenting
+                                      ;; because of how fn-name thing is currently designed
+                                      ;; This if we use the same name as the type key there it will compile
+                                      ;; but will cause problems in situations when recursion is used
+                                      ;; `fn-name` will be used only for reporting purposes, so there is no harm
+                                      (let [fn-name (symbol (format "%s'" (name k)))]
+                                        (assoc r k (instrument f
+                                                               (assoc ctx :defn-def {:fn-name fn-name
+                                                                                     :kind (or (-> ctx :defn-def :kind)
+                                                                                               :extend-type)
+                                                                                     :orig-form (or
+                                                                                                 (-> ctx :defn-def :orig-form)
+                                                                                                 (::original-form (meta form)))})))))
+                                    {}
+                                    emap)]
+                     (list etype inst-emap)))
+        extensions (->> (partition 2 exts)
+                        (mapcat inst-ext))]
    `(clojure.core/extend ~ext-type ~@extensions)))
 
 (defn- instrument-clojure-defmethod-form [[_ mname _ mdisp-val mfn] ctx]
@@ -499,13 +510,14 @@
     ;; can instrument everything.
     (maybe-instrument (instrument-coll form ctx) ctx)
 
+
     (let [ctx (cond ;; UPDATE `ctx` !!!
                 ;; we are defining a mutimethod
                 ;; set the context for the next fn* down the road
                 (expanded-defmethod-form? form ctx)
                 (assoc ctx
                        :defn-def {:fn-name (nth form 1)
-                                  :multimethod? true
+                                  :kind :defmethod
                                   :dispatch-val (nth form 2)
                                   :orig-form (::original-form (meta form))})
 
@@ -513,14 +525,24 @@
                 (expanded-defn-form? form)
                 (assoc ctx
                        :defn-def {:fn-name (nth form 1)
+                                  :kind :defn
                                   :orig-form (::original-form (meta form))})
 
                 (expanded-extend-protocol-form? form ctx)
                 (assoc ctx
-                       :defn-def {:orig-form (::original-form (meta form))})
+                       :defn-def {:orig-form (::original-form (meta form))
+                                  :kind :extend-protocol})
+
+                ;; all extend-protocols forms will pass thru here also, since they are the same
+                ;; inside the `do`, so keep the definicion :kind
+                (and (expanded-clojure-core-extend-form? form ctx))
+                (assoc ctx
+                       :defn-def {:orig-form (::original-form (meta form))
+                                  :kind (or (-> ctx :defn-def :kind) :extend-type)})
 
                 :else
                 ctx)]
+
       (cond
         (expanded-defmethod-form? form ctx)
         (instrument-clojure-defmethod-form form ctx)

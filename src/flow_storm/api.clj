@@ -69,13 +69,25 @@
      inst-code)))
 
 (defn trace-var [var-symb config]
-  (let [form (some-> (clj.repl/source-fn var-symb)
-                     read-string)]
+  (let [form (some->> (clj.repl/source-fn var-symb)
+                      (read-string {:read-cond :allow}))
+        form-ns (find-ns (symbol (namespace var-symb)))]
     (if form
 
-      (inst-ns/trace-form (find-ns (symbol (namespace var-symb))) form config)
+      (binding [*ns* form-ns]
+        (inst-ns/trace-form form-ns form config))
 
       (println "Couldn't find source for " var-symb))))
+
+(defn eval-form-bulk [forms]
+  (doseq [{:keys [form-ns form]} forms]
+    (binding [*ns* (find-ns (symbol form-ns))]
+      (eval form))))
+
+(defn trace-form-bulk [forms config]
+  (doseq [{:keys [form-ns form]} forms]
+    (binding [*ns* (find-ns (symbol form-ns))]
+      (inst-ns/trace-form (find-ns (symbol form-ns)) form config))))
 
 (defn untrace-var [var-symb]
   (let [ns-name (namespace var-symb)]

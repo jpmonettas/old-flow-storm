@@ -10,10 +10,11 @@
 
   (thread-exec-count [_] (count (:traces @*state)))
 
-  (add-form [_ form-id form-ns form]
+  (add-form [_ form-id form-ns def-kind form]
     (swap! *state assoc-in [:forms form-id] {:form/id form-id
                                              :form/ns form-ns
-                                             :form/form form}))
+                                             :form/form form
+                                             :form/def-kind def-kind}))
 
   (get-form [_ form-id]
     (get (:forms @*state) form-id))

@@ -8,6 +8,8 @@
                   :instrument-fn        'flow-storm.api/trace-var
                   :uninstrument-fn      'flow-storm.api/untrace-var
                   :uninstrument-fn-bulk 'flow-storm.api/untrace-vars
+                  :eval-form-bulk       'flow-storm.api/eval-form-bulk
+                  :instrument-form-bulk 'flow-storm.api/trace-form-bulk
                   :re-run-flow          'flow-storm.api/re-run-flow)
         f (resolve fn-symb)]
     ;; need to run this in a different thread so it doesn't block the UI thread

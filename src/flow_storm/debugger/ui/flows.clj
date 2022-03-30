@@ -114,7 +114,7 @@
         cell-factory (proxy [javafx.util.Callback] []
                        (call [lv]
                          (ui-utils/create-list-cell-factory
-                          (fn [list-cell [[fn-ns fn-name] cnt :as entry]]
+                          (fn [list-cell {:keys [fn-name fn-ns cnt]}]
                             (let [fn-lbl (doto (Label. (format "%s/%s" fn-ns fn-name))
                                            (.setPrefWidth 300))
                                   cnt-lbl (doto (Label. (str cnt))
@@ -127,10 +127,22 @@
         instrument-list-selection (.getSelectionModel instrument-list-view)
         ctx-menu-options [{:text "Un-instrument seleced functions"
                            :on-click (fn []
-                                       (let [vars-symbs (->> (.getSelectedItems instrument-list-selection)
-                                                             (map (fn [[[fn-ns fn-name] _]]
-                                                                    (symbol fn-ns fn-name))))]
-                                         (target-commands/run-command :uninstrument-fn-bulk vars-symbs)))}]
+                                       (let [groups (group-by (fn [{:keys [form-def-kind]}]
+                                                                (if (= form-def-kind :defn)
+                                                                  :vars
+                                                                  :forms))
+                                                              (.getSelectedItems instrument-list-selection))]
+
+                                         (let [vars-symbs (map (fn [{:keys [fn-name fn-ns]}]
+                                                                 (symbol fn-ns fn-name))
+                                                               (:vars groups))]
+                                           (target-commands/run-command :uninstrument-fn-bulk vars-symbs))
+
+                                         (let [forms (map (fn [{:keys [fn-ns form]}]
+                                                            {:form-ns fn-ns
+                                                             :form form})
+                                                          (:forms groups))]
+                                           (target-commands/run-command :eval-form-bulk forms))))}]
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)
         ]
 
@@ -148,10 +160,16 @@
     instrument-list-view))
 
 (defn- update-instrument-pane [flow-id thread-id]
-  (let [fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
-                           (map (fn [[fn-vec cnt]]
-                                  [fn-vec cnt]))
-                           (sort-by second >))
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
+                           (map (fn [[[fn-ns fn-name form-id] cnt]]
+                                  (let [{:keys [form/form form/def-kind]} (indexer/get-form indexer form-id)]
+                                    {:fn-name fn-name
+                                     :fn-ns fn-ns
+                                     :form-def-kind def-kind
+                                     :form form
+                                     :cnt cnt})))
+                           (sort-by :cnt >))
         [^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-instrument-list-id thread-id))]
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object fn-call-stats))))
@@ -238,11 +256,12 @@
         ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
     (doto node-box
       (.setOnMouseClicked (event-handler
-                           [^MouseEvent ev]
-                           (.show ctx-menu
-                                  node-box
-                                  (.getScreenX ev)
-                                  (.getScreenY ev)))))))
+                           [^MouseEvent mev]
+                           (when (= MouseButton/SECONDARY (.getButton mev))
+                             (.show ctx-menu
+                                    node-box
+                                    (.getScreenX mev)
+                                    (.getScreenY mev))))))))
 
 (defn- select-call-stack-tree-node [flow-id thread-id match-trace-idx]
   (let [[tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))
@@ -404,7 +423,8 @@
         form-text-flow (TextFlow. (into-array Text tokens-texts))
         form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
                     (.setBackground form-background-normal)
-                    (.setStyle "-fx-padding: 10;"))]
+                    (.setStyle "-fx-padding: 10;"))
+        ]
     (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
 
     (-> forms-box
@@ -424,18 +444,46 @@
     (.setOnMouseClicked (event-handler [_]))))
 
 (defn highlight-form [flow-id thread-id form-id]
-  (let [[form-pane]          (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))
-        [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))]
+  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+        form (indexer/get-form indexer form-id)
+        [form-pane]          (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))
+        [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))
 
-    ;; if the form we are about to highlight doesn't exist in the view add it first
-    (let [form-pane (or form-pane (add-form flow-id thread-id form-id))]
+        ;; if the form we are about to highlight doesn't exist in the view add it first
+        form-pane (or form-pane (add-form flow-id thread-id form-id))
+        ctx-menu-options [{:text "Fully instrument this form"
+                           :on-click (fn []
 
-      (ui-utils/center-node-in-scroll-pane thread-scroll-pane form-pane)
-      (.setBackground form-pane form-background-highlighted))))
+                                       (if (= :defn (:form/def-kind form))
+
+                                         (let [curr-trace-idx (state/current-trace-idx dbg-state flow-id thread-id)
+                                               curr-fn-call-trace-idx (indexer/callstack-frame-call-trace-idx indexer curr-trace-idx)
+                                               {:keys [fn-name]} (indexer/get-trace indexer curr-fn-call-trace-idx)]
+                                           (target-commands/run-command :instrument-fn (symbol (:form/ns form) fn-name) {}))
+
+                                         (target-commands/run-command :instrument-form-bulk [{:form-ns (:form/ns form)
+                                                                                              :form (:form/form form)}]
+                                                                      {})))}]
+        ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
+
+    (.setOnMouseClicked form-pane
+                        (event-handler
+                         [mev]
+                         (when (= MouseButton/SECONDARY (.getButton mev))
+                           (.show ctx-menu
+                                  form-pane
+                                  (.getScreenX mev)
+                                  (.getScreenY mev)))))
+
+
+    (ui-utils/center-node-in-scroll-pane thread-scroll-pane form-pane)
+    (.setBackground form-pane form-background-highlighted)))
 
 (defn- unhighlight-form [flow-id thread-id form-id]
   (let [[form-pane] (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))]
-    (.setBackground form-pane form-background-normal)))
+    (doto form-pane
+      (.setBackground form-background-normal)
+      (.setOnMouseClicked (event-handler [_])))))
 
 (defn- jump-to-coord [flow-id thread-id next-trace-idx]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)

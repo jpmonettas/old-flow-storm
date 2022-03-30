@@ -24,7 +24,7 @@
   (fs-api/run-with-execution-ctx
    {:flow-id 0
     :ns "dev"}
-   (dev-tester/boo [2]))
+   (dev-tester/boo [2 "hello" 8]))
   )
 
 (defn local-restart-everything []

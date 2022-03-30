@@ -125,8 +125,8 @@
   (set-trace-idx [_ flow-id thread-id idx]
     (swap! *state assoc-in [:flows flow-id :flow/threads thread-id :thread/curr-trace-idx] idx))
 
-  (update-fn-call-stats [_ flow-id thread-id {:keys [fn-ns fn-name]}]
-    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/fn-call-stats [fn-ns fn-name]] (fnil inc 0)))
+  (update-fn-call-stats [_ flow-id thread-id {:keys [fn-ns fn-name form-id]}]
+    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/fn-call-stats [fn-ns fn-name form-id]] (fnil inc 0)))
 
   (fn-call-stats [_ flow-id thread-id]
     (get-in @*state [:flows flow-id :flow/threads thread-id :thread/fn-call-stats]))
