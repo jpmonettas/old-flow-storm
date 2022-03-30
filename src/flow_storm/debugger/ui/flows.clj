@@ -12,6 +12,7 @@
            [javafx.scene.control Button CheckBox Label ListView ListCell ScrollPane SelectionMode
             TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
+           [ javafx.beans.value ChangeListener]
            [javafx.scene Node]
            [javafx.scene.paint Color]
            [javafx.geometry Insets Side Orientation Pos]
@@ -79,19 +80,19 @@
     (store-obj flow-id (state-vars/thread-forms-scroll-id thread-id) scroll-pane)
     scroll-pane))
 
-(defn create-result-pprint-pane [flow-id thread-id]
+(defn create-pprint-pane [flow-id thread-id pane-id]
   (let [result-text-area (doto (TextArea.)
                            (.setEditable false))]
-    (store-obj flow-id (state-vars/thread-result-text-area-id thread-id) result-text-area)
+    (store-obj flow-id (state-vars/thread-pprint-text-area-id thread-id pane-id) result-text-area)
     result-text-area))
 
 (defn create-result-tree-pane [flow-id thread-id]
   (Label. "TREE")
   )
 
-(defn update-result-pane [flow-id thread-id val]
+(defn update-pprint-pane [flow-id thread-id pane-id val]
   ;; TODO: find and update the tree
-  (let [[^TextArea text-area] (obj-lookup flow-id (state-vars/thread-result-text-area-id thread-id))
+  (let [[^TextArea text-area] (obj-lookup flow-id (state-vars/thread-pprint-text-area-id thread-id pane-id))
         val-str (with-out-str (pp/pprint val))]
     (.setText text-area val-str)))
 
@@ -99,7 +100,7 @@
   (let [tools-tab-pane (doto (TabPane.)
                          (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE))
         pprint-tab (doto (Tab. "Pprint")
-                     (.setContent (create-result-pprint-pane flow-id thread-id)))
+                     (.setContent (create-pprint-pane flow-id thread-id "expr_result")))
         tree-tab (doto (Tab. "Tree")
                    (.setContent (create-result-tree-pane flow-id thread-id)))]
     (-> tools-tab-pane
@@ -126,15 +127,7 @@
                                            (.setPrefWidth 300))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))
-                                  ;;inst-check (CheckBox.)
-                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl #_inst-check]))]
-                              #_(doto inst-check
-                                (.setSelected true)
-                                (.setOnAction (event-handler
-                                               [_]
-                                               (if (.isSelected inst-check)
-                                                 (target-commands/run-command :instrument-fn (symbol fn-ns fn-name) {})
-                                                 (target-commands/run-command :uninstrument-fn (symbol fn-ns fn-name))))))
+                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl]))]
                               (.setGraphic ^Node list-cell hbox))))))
         instrument-list-view (doto (ListView. observable-bindings-list)
                                (.setEditable false)
@@ -323,9 +316,25 @@
         search-pane (create-tree-search-pane flow-id thread-id)
         tree-view (doto (TreeView.)
                     (.setEditable false)
-                    (.setCellFactory cell-factory))]
+                    (.setCellFactory cell-factory))
+        tree-view-sel-model (.getSelectionModel tree-view)
+        callstack-fn-args-pane   (create-pprint-pane flow-id thread-id "fn_args")
+        callstack-fn-ret-pane (create-pprint-pane flow-id thread-id "fn_ret")]
+
+    (.addListener (.selectedItemProperty tree-view-sel-model)
+                  (proxy [ChangeListener] []
+                    (changed [changed old-val new-val]
+                      (when new-val
+                        (let [{:keys [args ret]} (indexer/callstack-node-frame indexer (.getValue new-val))]
+                          (update-pprint-pane flow-id thread-id "fn_args" args)
+                          (update-pprint-pane flow-id thread-id "fn_ret" ret))))))
+
     (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
-    (VBox. (into-array Node [update-btn search-pane tree-view]))))
+    (VBox. (into-array Node [update-btn
+                             search-pane
+                             tree-view
+                             (Label. "Args:") callstack-fn-args-pane
+                             (Label. "Ret:") callstack-fn-ret-pane]))))
 
 
 (defn- highlight-executing [^Text token-text]
@@ -483,7 +492,7 @@
               (highlight-executing text))))
 
         ;; update reusult panel
-        (update-result-pane flow-id thread-id (:result next-trace))
+        (update-pprint-pane flow-id thread-id "expr_result" (:result next-trace))
 
         ;; update locals panel
         (update-locals-pane flow-id thread-id (indexer/bindings-for-trace indexer next-trace-idx))
@@ -525,7 +534,7 @@
                                (.setSide (Side/BOTTOM)))
         code-tab (doto (Tab. "Code")
                    (.setContent (create-code-pane flow-id thread-id)))
-        callstack-tree-tab (doto (Tab. "Call stack")
+        callstack-tree-tab (doto (Tab. "Call tree")
                              (.setContent (create-call-stack-tree-pane flow-id thread-id))
                              (.setOnSelectionChanged (event-handler [_] (update-call-stack-tree-pane flow-id thread-id))))
         instrument-tab (doto (Tab. "Instrument")

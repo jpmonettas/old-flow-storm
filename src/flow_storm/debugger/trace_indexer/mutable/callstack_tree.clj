@@ -128,7 +128,7 @@
           ^CallStackFrame curr-frame (get-node-frame curr-node)]
       (update-trace curr-frame trace-idx)
       (when (:outer-form? exec-trace)
-        (set-ret curr-frame (:ret exec-trace))
+        (set-ret curr-frame (:result exec-trace))
         (.pop node-stack))
       (.put trace-idx->frame trace-idx curr-frame)))
 

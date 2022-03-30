@@ -78,8 +78,8 @@
 (defn thread-forms-scroll-id [thread-id]
   (format "forms_scroll_%d" thread-id))
 
-(defn thread-result-text-area-id [thread-id]
-  (format "result_text_area_%d" thread-id))
+(defn thread-pprint-text-area-id [thread-id pane-id]
+  (format "pprint_text_area_%d_%s" thread-id pane-id))
 
 (defn thread-locals-list-id [thread-id]
   (format "locals_list_%d" thread-id))
