@@ -1,5 +1,5 @@
 (ns flow-storm.debugger.ui.utils
-  (:import [javafx.scene.control ContextMenu MenuItem ScrollPane]
+  (:import [javafx.scene.control ContextMenu MenuItem ScrollPane ListCell]
            [javafx.scene Node]))
 
 (defn run-later*
@@ -58,3 +58,11 @@
     (.setVvalue scroll-pane (* (.getVmax scroll-pane)
                                (/ (- y (* v 0.5))
                                   (- h v))))))
+
+(defn create-list-cell-factory [update-item-fn]
+  (proxy [ListCell] []
+    (updateItem [item empty?]
+      (proxy-super updateItem item empty?)
+      (if empty?
+        (.setGraphic ^Node this nil)
+        (update-item-fn this item)))))

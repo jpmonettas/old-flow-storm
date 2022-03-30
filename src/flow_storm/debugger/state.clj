@@ -67,6 +67,7 @@
   (callstack-tree-hidden? [_ flow-id thread-id fn-name fn-ns])
   (callstack-tree-item-expanded? [_ flow-id thread-id fn-call-trace-idx])
   (callstack-tree-expand-calls [_ flow-id thread-id fn-call-trace-indexes])
+  (callstack-tree-select-path [_ flow-id thread-id select-path])
   (callstack-tree-collapse-calls [_ flow-id thread-id fn-call-trace-indexes])
   (callstack-tree-collapse-all-calls [_ flow-id thread-id]))
 
@@ -109,6 +110,7 @@
             :thread/curr-trace-idx nil
             :thread/callstack-tree-hidden-fns #{}
             :thread/callstack-expanded-traces #{}
+            :thread/callstack-selected-trace-idx nil
             :thread/fn-call-stats {}}))
 
   (get-thread [_ flow-id thread-id]
@@ -148,6 +150,14 @@
 
   (callstack-tree-expand-calls [_ flow-id thread-id fn-call-trace-indexes]
     (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces] into fn-call-trace-indexes))
+
+  (callstack-tree-select-path [_ flow-id thread-id select-path]
+    (let [[target-id & parents-ids] select-path]
+      (swap! *state update-in [:flows flow-id :flow/threads thread-id]
+             (fn [thread]
+               (-> thread
+                   (assoc :thread/callstack-expanded-traces (into #{} parents-ids))
+                   (assoc :thread/callstack-selected-trace-idx target-id))))))
 
   (callstack-tree-collapse-calls [_ flow-id thread-id fn-call-trace-indexes]
     (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/callstack-expanded-traces] (fn [traces] (apply disj traces fn-call-trace-indexes))))

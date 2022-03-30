@@ -89,3 +89,6 @@
 
 (defn thread-callstack-tree-view-id [thread-id]
   (format "callstack_tree_view_%s" thread-id))
+
+(defn thread-callstack-tree-item [thread-id trace-idx]
+  (format "callstack_tree_item_%d_%d" thread-id trace-idx))
