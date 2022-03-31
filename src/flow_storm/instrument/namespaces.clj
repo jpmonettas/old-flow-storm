@@ -78,7 +78,7 @@
         (eval inst-form))
       (catch Exception e
         #_(tap> (pr-str inst-form))
-        (tap> e)
+        #_(tap> e)
         (let [e-msg (.getMessage e)
               ex-type (cond
 

@@ -36,11 +36,47 @@
       (recur (inc i) (conj inv-chars inv-char))
       inv-chars)))
 
+(def hacked-code-table
+  (#'pp/two-forms
+     (#'pp/add-core-ns
+        {'def #'pp/pprint-hold-first, 'defonce #'pp/pprint-hold-first,
+         'defn #'pp/pprint-defn, 'defn- #'pp/pprint-defn, 'defmacro #'pp/pprint-defn, 'fn #'pp/pprint-defn,
+         'let #'pp/pprint-let, 'loop #'pp/pprint-let, 'binding #'pp/pprint-let,
+         'with-local-vars #'pp/pprint-let, 'with-open #'pp/pprint-let, 'when-let #'pp/pprint-let,
+         'if-let #'pp/pprint-let, 'doseq #'pp/pprint-let, 'dotimes #'pp/pprint-let,
+         'when-first #'pp/pprint-let,
+         'if #'pp/pprint-if, 'if-not #'pp/pprint-if, 'when #'pp/pprint-if, 'when-not #'pp/pprint-if,
+         'cond #'pp/pprint-cond, 'condp #'pp/pprint-condp,
+
+         'fn* #'pp/pprint-simple-code-list, ;; <--- all for changing this from `pp/pprint-anon-func` to `pp/pprint-simple-code-list`
+         ;;      so it doesn't substitute anonymous functions
+         '. #'pp/pprint-hold-first, '.. #'pp/pprint-hold-first, '-> #'pp/pprint-hold-first,
+         'locking #'pp/pprint-hold-first, 'struct #'pp/pprint-hold-first,
+         'struct-map #'pp/pprint-hold-first, 'ns #'pp/pprint-ns
+         })))
+
+(defn code-pprint [form]
+  ;; Had to hack pprint like this because code pprinting replace (fn [arg#] ... arg# ...) with #(... % ...)
+  ;; and #' with var, deref with @ etc, wich breaks our pprintln system
+  ;; This is super hacky! because I wasn't able to use with-redefs (it didn't work) I replace
+  ;; the pprint method for ISeqs for the duration of our printing
+
+  (#'pp/use-method pp/code-dispatch clojure.lang.ISeq (fn [alis] ;; <---- this hack disables reader macro sustitution
+                                                        (if-let [special-form (hacked-code-table (first alis))]
+                                                          (special-form alis)
+                                                          (#'pp/pprint-simple-code-list alis))))
+
+  (binding [pp/*print-pprint-dispatch* pp/code-dispatch
+            pp/*code-table* hacked-code-table]
+    (pp/pprint form))
+
+  ;; restore the original pprint so we don't break it
+  (#'pp/use-method pp/code-dispatch clojure.lang.ISeq #'pp/pprint-code-list))
+
 (defn pprint-tokens [form]
   (let [form (tag-form-recursively form)
         pprinted-str (with-out-str
-                       (binding [pp/*print-pprint-dispatch* pp/code-dispatch]
-                         (pp/pprint form)))
+                       (code-pprint form))
         pos->layout-char (->> pprinted-str
                               (keep-indexed (fn [i c] (cond
                                                         (= c \newline) [i :nl]
@@ -48,20 +84,21 @@
                                                         (= c \,)       [i :sp]
                                                         :else nil)))
                               (into {}))
-        pre-tokens (form-tokens form)]
-    (loop [[[tname :as tok] & next-tokens] pre-tokens
-           i 0
-           final-toks []]
-      (if-not tok
-        final-toks
-        (if (pos->layout-char i)
-          (let [consec-inv-chars (consecutive-inv-chars pos->layout-char i)]
-            (recur next-tokens
-                   (+ i (count tname) (count consec-inv-chars))
-                   (-> final-toks
-                       (into consec-inv-chars)
-                       (into  [tok]))))
-          (recur next-tokens (+ i (count tname)) (into final-toks [tok])))))))
+        pre-tokens (form-tokens form)
+        final-tokens (loop [[[tname :as tok] & next-tokens] pre-tokens
+                            i 0
+                            final-toks []]
+                       (if-not tok
+                         final-toks
+                         (if (pos->layout-char i)
+                           (let [consec-inv-chars (consecutive-inv-chars pos->layout-char i)]
+                             (recur next-tokens
+                                    (+ i (count tname) (count consec-inv-chars))
+                                    (-> final-toks
+                                        (into consec-inv-chars)
+                                        (into  [tok]))))
+                           (recur next-tokens (+ i (count tname)) (into final-toks [tok])))))]
+    final-tokens))
 
 (defn- debug-print-tokens [ptokens]
   (doseq [t ptokens]
@@ -84,54 +121,22 @@
              pp/pprint
              with-out-str))))
 
-  (def test-form '(defn load! []
-                    (let [environment (or (get-env-variable "SPREAD_ENV") "dev")
-                          dev-env?    (= "dev" environment)
-                          {{:keys [client-secret]} :google
-                           {:keys [api-key]}       :sendgrid
-                           :keys                   [private-key]}
-                          (when dev-env?
-                            (try-secrets "secrets.edn"))]
-
-                      {:env     environment
-                       :version "1.0.3"
-                       :logging {:level (or (keyword (get-env-variable "LOGGING_LEVEL")) :debug) :pretty? dev-env?}
-                       :api     {:port            (Integer/parseInt (or (get-env-variable "API_PORT") "3001"))
-                                 :host            (or (get-env-variable "API_HOST") "0.0.0.0")
-                                 :allowed-origins #{"http://localhost:8020"
-                                                    "http://127.0.0.1:8020"
-                                                    "https://studio.apollographql.com"
-                                                    "https://spreadviz.org"
-                                                    "https://www.spreadviz.org"}}
-                       :aws     (cond-> {:region (when-not dev-env?
-                                                   (get-env-variable "API_AWS_REGION"))
-                                         :access-key-id  (or (get-env-variable "API_AWS_ACCESS_KEY_ID") "AKIAIOSFODNN7EXAMPLE")
-                                         :secret-access-key (or (get-env-variable "API_AWS_SECRET_ACCESS_KEY") "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-                                         :bucket-name (or (get-env-variable "BUCKET_NAME") "spread-dev-uploads")
-                                         :workers-queue-url (or (get-env-variable "WORKERS_QUEUE_URL") "http://localhost:9324/queue/workers")}
-                                  dev-env? (assoc :sqs-host "localhost"
-                                                  :sqs-port 9324
-                                                  :s3-host "127.0.0.1"
-                                                  :s3-port 9000))
-                       :db
-                       {:dbname   (or (get-env-variable "DB_DATABASE") "spread")
-                        :port     (or (get-env-variable "DB_PORT") 3306)
-                        :user     (or (get-env-variable "DB_USER") "root")
-                        :password (or (get-env-variable "DB_PASSWORD") "Pa55w0rd")
-                        :host     (or (get-env-variable "DB_HOST") "127.0.0.1")}
-
-                       :google
-                       {:client-id     (or (get-env-variable "GOOGLE_CLIENT_ID") "806052757605-5sbubbk9ubj0tq95dp7b58v36tscqv1r.apps.googleusercontent.com")
-                        :client-secret (or client-secret (get-env-variable "GOOGLE_CLIENT_SECRET"))}
-
-                       :sendgrid
-                       {:template-id "d-02dda5f4b9e94948aedcec04b0e37abc"
-                        :api-key     (or (get-env-variable "SENDGRID_API_KEY") api-key)}
-
-                       :public-key
-                       (or (get-env-variable "PUBLIC_KEY")
-                           "-----BEGIN PUBLIC KEY-----\nMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAJliLjOIAqGbnjGBM1RJml/l0MHayaRH\ncgEg00O9wBYvoNXrstFSzKTCKtG5MayUKgdG7C/98nu/TEzhvRFjINcCAwEAAQ==\n-----END PUBLIC KEY-----\n")
-                       :private-key (or private-key (get-env-variable "PRIVATE_KEY"))})))
+  (def test-form '(defn clojurescript-version
+                    "Returns clojurescript version as a printable string."
+                    []
+                    (fn* [p1__12449#] (+ 1 p1__12449#))
+                    (if (bound? #'*clojurescript-version*)
+                      (str
+                       (:major *clojurescript-version*)
+                       "."
+                       (:minor *clojurescript-version*)
+                       (when-let [i (:incremental *clojurescript-version*)]
+                         (str "." i))
+                       (when-let [q (:qualifier *clojurescript-version*)]
+                         (str "." q))
+                       (when (:interim *clojurescript-version*)
+                         "-SNAPSHOT"))
+                      @synthetic-clojurescript-version)))
 
   (binding [pp/*print-right-margin* 80
               pp/*print-pprint-dispatch* pp/code-dispatch]
