@@ -193,7 +193,6 @@
 
 (defn- update-locals-pane [flow-id thread-id bindings]
   (let [[^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
-    (tap> (format "TODO FIX BINDINGS %s" bindings))
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object bindings))))
 

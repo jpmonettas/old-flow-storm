@@ -52,12 +52,13 @@
     (.get traces idx))
 
   (bindings-for-trace [this trace-idx]
-    (let [{:keys [timestamp]} (.get traces trace-idx)]
-      (->> (callstack-tree/bind-traces-for-trace callstack-tree trace-idx)
-           (keep (fn [bt]
-                   (when (< (:timestamp bt) timestamp)
-                     [(:symbol bt) (:value bt)])))
-           (into {}))))
+    (let [{:keys [timestamp]} (.get traces trace-idx)
+          bind-traces (callstack-tree/bind-traces-for-trace callstack-tree trace-idx)
+          applicable-binds (keep (fn [bt]
+                                   (when (<= (:timestamp bt) timestamp)
+                                     [(:symbol bt) (:value bt)]))
+                                 bind-traces)]
+      (into {} applicable-binds)))
 
   (interesting-expr-traces [_ form-id trace-idx]
     (let [[min-trace-idx max-trace-idx] (callstack-tree/frame-min-max-traces callstack-tree trace-idx)
