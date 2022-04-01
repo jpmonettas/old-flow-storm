@@ -162,13 +162,6 @@
 (defn- update-instrument-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
         fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
-                           (map (fn [[[fn-ns fn-name form-id] cnt]]
-                                  (let [{:keys [form/form form/def-kind]} (indexer/get-form indexer form-id)]
-                                    {:fn-name fn-name
-                                     :fn-ns fn-ns
-                                     :form-def-kind def-kind
-                                     :form form
-                                     :cnt cnt})))
                            (sort-by :cnt >))
         [^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-instrument-list-id thread-id))]
     (.clear observable-bindings-list)

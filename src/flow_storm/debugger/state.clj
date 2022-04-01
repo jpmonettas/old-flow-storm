@@ -1,7 +1,9 @@
 (ns flow-storm.debugger.state
   (:require [clojure.spec.alpha :as s]
-            [flow-storm.tracer])
-  (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
+            [flow-storm.tracer]
+            [flow-storm.debugger.trace-indexer.protos :as indexer])
+  (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]
+           [java.util HashMap Map$Entry]))
 
 
 ;; (s/def :thread/form (s/keys :req [:form/id
@@ -59,7 +61,8 @@
   (current-trace-idx [_ flow-id thread-id])
   (set-trace-idx [_ flow-id thread-id idx])
   (update-fn-call-stats [_ flow-id thread-id fn-call-trace])
-  (fn-call-stats [_ flow-id thread-id]))
+  (fn-call-stats [_ flow-id thread-id])
+  (clear-flow-fn-call-stats [_ flow-id]))
 
 (defprotocol UIState
   (increment-trace-counter [_])
@@ -82,21 +85,23 @@
 ;; Utils ;;
 ;;;;;;;;;;;
 
-(defrecord DebuggerState [*state]
+(defrecord DebuggerState [*state ^HashMap fn-call-stats]
 
   FlowStore
 
-  (create-flow [_ flow-id exec-form-ns exec-form timestamp]
+  (create-flow [this flow-id exec-form-ns exec-form timestamp]
     ;; if a flow for `flow-id` already exist we discard it and
     ;; will be GCed
     (swap! *state assoc-in [:flows flow-id] {:flow/id flow-id
                                              :flow/threads {}
                                              :flow/execution-expr {:ns exec-form-ns
                                                                    :form exec-form}
-                                             :timestamp timestamp}))
+                                             :timestamp timestamp})
+    (clear-flow-fn-call-stats this flow-id))
 
-  (remove-flow [_ flow-id]
-    (swap! *state update :flows dissoc flow-id))
+  (remove-flow [this flow-id]
+    (swap! *state update :flows dissoc flow-id)
+    (clear-flow-fn-call-stats this flow-id))
 
   (get-flow [_ flow-id]
     (get-in @*state [:flows flow-id]))
@@ -126,11 +131,34 @@
     (swap! *state assoc-in [:flows flow-id :flow/threads thread-id :thread/curr-trace-idx] idx))
 
   (update-fn-call-stats [_ flow-id thread-id {:keys [fn-ns fn-name form-id]}]
-    (swap! *state update-in [:flows flow-id :flow/threads thread-id :thread/fn-call-stats [fn-ns fn-name form-id]] (fnil inc 0)))
+    (locking fn-call-stats
+      (let [k [flow-id thread-id fn-ns fn-name form-id]
+            curr-val (or (.getOrDefault fn-call-stats k 0))]
+        (.put fn-call-stats k (inc curr-val)))))
 
-  (fn-call-stats [_ flow-id thread-id]
-    (get-in @*state [:flows flow-id :flow/threads thread-id :thread/fn-call-stats]))
+  (fn-call-stats [this flow-id thread-id]
+    (locking fn-call-stats
+      (let [indexer (thread-trace-indexer this flow-id thread-id)]
+       (->> (.entrySet fn-call-stats)
+            (map (fn [^Map$Entry entry]
+                   (let [[_ _ fn-ns fn-name form-id] (.getKey entry)
+                         {:keys [form/form form/def-kind]} (indexer/get-form indexer form-id)]
+                     {:fn-ns fn-ns
+                      :fn-name fn-name
+                      :form form
+                      :form-def-kind def-kind
+                      :cnt (.getValue entry)})))))))
 
+  (clear-flow-fn-call-stats [this flow-id]
+    (locking fn-call-stats
+      (let [flow-keys (->> (.entrySet fn-call-stats)
+                           (keep (fn [^Map$Entry entry]
+                                   (let [key (.getKey entry)]
+                                     (when (= flow-id (first key))
+                                       key))))
+                           doall)]
+        (doseq [key flow-keys]
+          (.remove fn-call-stats key)))))
 
   UIState
 
@@ -174,7 +202,8 @@
                          ;;                  false)
 
                          ;;                true))
-                         )))
+                         )
+                   (HashMap.)))
 
 (defn init-state! []
   (alter-var-root #'dbg-state (constantly (make-debugger-state))))

@@ -37,10 +37,6 @@
 
   FormInitTrace
   (process [{:keys [flow-id form-id thread-id form ns def-kind timestamp] :as t}]
-    ;; if flow doesn't exist, create one
-    #_(when-not (state/get-flow dbg-state flow-id)
-      (state/create-flow dbg-state flow-id timestamp)
-      (ui-flows/create-empty-flow flow-id))
 
     ;; if thread doesn't exist, create one
     (when-not (state/get-thread dbg-state flow-id thread-id)
