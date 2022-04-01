@@ -5,6 +5,8 @@
 (defonce stage nil)
 (defonce scene nil)
 
+(def long-running-task-thread (atom nil))
+
 ;; Because scene.lookup doesn't work if you lookup before a layout pass
 ;; So adding a node and looking it up quickly sometimes it doesn't work
 

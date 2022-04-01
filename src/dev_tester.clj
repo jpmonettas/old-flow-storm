@@ -36,6 +36,9 @@
   (sub [l] (- l 42)))
 
 (defn boo [xs]
-  (-> (reduce + (map do-it xs))
-      add
-      sub))
+  (let [a 25
+        b (+ a 4)
+        c (+ a b 7)]
+    (-> (reduce + (map do-it xs))
+       add
+       sub)))

@@ -288,7 +288,7 @@
                                                                                       ;; they are sinchronized, so we skip this fn* body tracing
                                                                                       (do
 
-                                                                                        (when lazy-seq-fn?
+                                                                                        #_(when lazy-seq-fn?
                                                                                           (println (format "Warning skipping fn* body instrumentation on (%s) because it returns a lazy-seq" form-ns)))
 
                                                                                         arity-body-forms)

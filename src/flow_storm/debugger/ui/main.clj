@@ -2,7 +2,8 @@
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
-            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]])
+            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
+            [flow-storm.debugger.ui.state-vars :as state-vars])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
@@ -79,9 +80,17 @@
      (let [scene (Scene. (build-main-pane) 1024 768)]
        (doto scene
          (.setOnKeyPressed (event-handler
-                            [ke]
-                            (let [key (.getName (.getCode ke))]
-                              (println "Key pressed" key)))))
+                            [kev]
+                            (let [key-name (.getName (.getCode kev))]
+                              (cond
+                                (and (.isControlDown kev)
+                                     (= key-name "G"))
+                                (do
+                                  (tap> "Interrupting long running task")
+                                  (.interrupt @state-vars/long-running-task-thread))
+
+                                :else
+                                (tap> (format "Unhandled keypress %s" key-name)))))))
 
        (alter-var-root #'scene (constantly scene))
        (alter-var-root #'stage (constantly (doto (Stage.)

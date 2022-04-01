@@ -274,27 +274,39 @@
         search-from-txt (TextField. "0")
         search-lvl-txt (TextField. "1")
         search-match-lbl (Label. "")
-        search-btn (doto (Button. "Search")
-                     (.setOnAction (event-handler
-                                    [_]
-                                    (tap> "Searching")
-                                    (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
-                                    (let [next-match-path (binding [clojure.core/*print-level* (Integer/parseInt (.getText search-lvl-txt))]
-                                                            (indexer/search-next-fn-call-trace
-                                                             indexer
-                                                             (.getText search-txt)
-                                                             (Integer/parseInt (.getText search-from-txt))))]
-                                      (if next-match-path
-                                        (let [[match-trace-idx] next-match-path]
-                                          (tap> (format "Next match at %s" next-match-path))
-                                          (state/callstack-tree-select-path dbg-state
-                                                                            flow-id
-                                                                            thread-id
-                                                                            next-match-path)
-                                          (update-call-stack-tree-pane flow-id thread-id)
-                                          (select-call-stack-tree-node flow-id thread-id match-trace-idx)
-                                          (.setText search-match-lbl (format "Match idx %d" match-trace-idx)))
-                                        (tap> "No match found"))))))]
+        search-btn (Button. "Search")
+        _ (doto search-btn
+              (.setOnAction (event-handler
+                             [_]
+                             (tap> "Searching")
+                             (.setDisable search-btn true)
+                             (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
+                             (let [next-match-path (indexer/search-next-fn-call-trace
+                                                    indexer
+                                                    (.getText search-txt)
+                                                    (Integer/parseInt (.getText search-from-txt))
+                                                    (Integer/parseInt (.getText search-lvl-txt))
+                                                    (fn [next-match-path]
+                                                      (if next-match-path
+                                                        (let [[match-trace-idx] next-match-path]
+                                                          (tap> (format "Next match at %s" next-match-path))
+                                                          (state/callstack-tree-select-path dbg-state
+                                                                                            flow-id
+                                                                                            thread-id
+                                                                                            next-match-path)
+                                                          (ui-utils/run-later
+                                                           (update-call-stack-tree-pane flow-id thread-id)
+                                                           (select-call-stack-tree-node flow-id thread-id match-trace-idx)
+                                                           (.setText search-match-lbl (format "Match idx %d" match-trace-idx))
+                                                           (.setText search-from-txt (str match-trace-idx))))
+                                                        (do
+                                                          (ui-utils/run-later (.setText search-match-lbl ""))
+                                                          (tap> "No match found")))
+                                                      (ui-utils/run-later (.setDisable search-btn false)))
+                                                    (fn [progress-perc]
+                                                      (ui-utils/run-later
+                                                       (.setText search-match-lbl (format "%.2f %%" (double progress-perc))))))]
+                               ))))]
     (HBox. (into-array Node [(Label. "Search: ") search-txt
                              (Label. "From: ")   search-from-txt
                              (Label. "Args print level : ") search-lvl-txt

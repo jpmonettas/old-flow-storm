@@ -14,4 +14,4 @@
   (callstack-node-frame [_ node])
   (callstack-tree-childs [_ node])
   (callstack-frame-call-trace-idx [_ trace-idx])
-  (search-next-fn-call-trace [_ s from-idx]))
+  (search-next-fn-call-trace [_ s from-idx print-level on-result-cb on-progress-cb]))
