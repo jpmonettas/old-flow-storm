@@ -17,11 +17,13 @@
   (thread-exec-count [this]
     (.size traces))
 
-  (add-form [this form-id form-ns def-kind form]
-    (.put forms form-id {:form/id form-id
-                         :form/ns form-ns
-                         :form/form form
-                         :form/def-kind def-kind}))
+  (add-form [this form-id form-ns def-kind mm-dispatch-val form]
+    (.put forms form-id (cond-> {:form/id form-id
+                                 :form/ns form-ns
+                                 :form/form form
+                                 :form/def-kind def-kind}
+                          (= def-kind :defmethod)
+                          (assoc :multimethod/dispatch-val mm-dispatch-val))))
 
   (get-form [this form-id]
     (.get forms form-id))
@@ -98,6 +100,7 @@
 
                                                      (let [{:keys [fn-name args-vec] :as t} (.get traces i)]
                                                        (if (utils/fn-call-trace? t)
+
 
                                                          (if (and (> i from-idx)
                                                                   (or (str/includes? fn-name search-str)

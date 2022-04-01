@@ -10,11 +10,13 @@
 
   (thread-exec-count [_] (count (:traces @*state)))
 
-  (add-form [_ form-id form-ns def-kind form]
-    (swap! *state assoc-in [:forms form-id] {:form/id form-id
-                                             :form/ns form-ns
-                                             :form/form form
-                                             :form/def-kind def-kind}))
+  (add-form [_ form-id form-ns def-kind mm-dispatch-val form]
+    (swap! *state assoc-in [:forms form-id] (cond-> {:form/id form-id
+                                                     :form/ns form-ns
+                                                     :form/form form
+                                                     :form/def-kind def-kind}
+                                              (= def-kind :defmethod)
+                                              (assoc :multimethod/dispatch-val mm-dispatch-val))))
 
   (get-form [_ form-id]
     (get (:forms @*state) form-id))

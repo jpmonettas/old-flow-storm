@@ -2,7 +2,7 @@
 
 (defprotocol TraceIndex
   (thread-exec-count [_])
-  (add-form [_ form-id form-ns def-kind form])
+  (add-form [_ form-id form-ns def-kind mm-dispatch-val form])
   (get-form [_ form-id])
   (add-fn-call-trace [_ trace])
   (add-exec-trace [_ trace])

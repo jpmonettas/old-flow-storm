@@ -93,7 +93,10 @@
 (defn update-pprint-pane [flow-id thread-id pane-id val]
   ;; TODO: find and update the tree
   (let [[^TextArea text-area] (obj-lookup flow-id (state-vars/thread-pprint-text-area-id thread-id pane-id))
-        val-str (with-out-str (pp/pprint val))]
+        val-str (with-out-str
+                  (binding [clojure.core/*print-level* 7
+                            clojure.core/*print-length* 50]
+                    (pp/pprint val)))]
     (.setText text-area val-str)))
 
 (defn- create-result-pane [flow-id thread-id]
@@ -114,8 +117,12 @@
         cell-factory (proxy [javafx.util.Callback] []
                        (call [lv]
                          (ui-utils/create-list-cell-factory
-                          (fn [list-cell {:keys [fn-name fn-ns cnt]}]
-                            (let [fn-lbl (doto (Label. (format "%s/%s" fn-ns fn-name))
+                          (fn [list-cell {:keys [form-def-kind fn-name fn-ns form-id dispatch-val cnt]}]
+                            (let [fn-lbl (doto (Label. (case form-def-kind
+                                                         :defmethod       (format "M %s/%s %s" fn-ns fn-name dispatch-val)
+                                                         :extend-protocol (format "P %s/%s" fn-ns fn-name)
+                                                         :extend-type     (format "T %s/%s" fn-ns fn-name)
+                                                         :defn            (format "F %s/%s" fn-ns fn-name)))
                                            (.setPrefWidth 300))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))

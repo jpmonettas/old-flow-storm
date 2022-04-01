@@ -266,7 +266,9 @@
                                                                     outer-preamble (-> []
                                                                                        (into [`(~on-outer-form-init-fn {:form-id ~form-id
                                                                                                                         :ns ~form-ns
-                                                                                                                        :def-kind ~(:kind defn-def)}
+                                                                                                                        :def-kind ~(:kind defn-def)
+                                                                                                                        :dispatch-val ~(:dispatch-val defn-def)
+                                                                                                                        }
                                                                                                 (quote ~orig-outer-form)
                                                                                                 )])
                                                                                        (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
@@ -518,7 +520,7 @@
                 (assoc ctx
                        :defn-def {:fn-name (nth form 1)
                                   :kind :defmethod
-                                  :dispatch-val (nth form 2)
+                                  :dispatch-val (pr-str (nth form 3))
                                   :orig-form (::original-form (meta form))})
 
 

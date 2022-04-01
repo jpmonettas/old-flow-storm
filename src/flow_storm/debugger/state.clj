@@ -142,11 +142,13 @@
        (->> (.entrySet fn-call-stats)
             (map (fn [^Map$Entry entry]
                    (let [[_ _ fn-ns fn-name form-id] (.getKey entry)
-                         {:keys [form/form form/def-kind]} (indexer/get-form indexer form-id)]
+                         {:keys [form/form form/def-kind multimethod/dispatch-val] :as xx} (indexer/get-form indexer form-id)]
                      {:fn-ns fn-ns
                       :fn-name fn-name
+                      :form-id form-id
                       :form form
                       :form-def-kind def-kind
+                      :dispatch-val dispatch-val
                       :cnt (.getValue entry)})))))))
 
   (clear-flow-fn-call-stats [this flow-id]

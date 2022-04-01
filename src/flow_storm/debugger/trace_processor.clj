@@ -4,7 +4,6 @@
             [flow-storm.debugger.ui.main :as ui-main]
             [flow-storm.debugger.ui.utils :as ui-utils]
             [flow-storm.debugger.ui.flows :as ui-flows]
-            [flow-storm.debugger.trace-indexer.immutable.impl :as imm-trace-indexer]
             [flow-storm.debugger.trace-indexer.mutable.impl :as mut-trace-indexer]
             [clojure.pprint :as pp]
             flow-storm.tracer)
@@ -36,14 +35,12 @@
     (ui-utils/run-now (ui-flows/create-empty-flow flow-id)))
 
   FormInitTrace
-  (process [{:keys [flow-id form-id thread-id form ns def-kind timestamp] :as t}]
+  (process [{:keys [flow-id form-id thread-id form ns def-kind mm-dispatch-val timestamp] :as t}]
 
     ;; if thread doesn't exist, create one
     (when-not (state/get-thread dbg-state flow-id thread-id)
       (state/create-thread dbg-state flow-id thread-id
-                           #_(imm-trace-indexer/make-indexer)
-                           (mut-trace-indexer/make-indexer)
-                           )
+                           (mut-trace-indexer/make-indexer))
       (ui-flows/create-empty-thread flow-id thread-id))
 
     ;; add the form
@@ -51,6 +48,7 @@
                       form-id
                       ns
                       def-kind
+                      mm-dispatch-val ;; this only applies to defmethods forms, will be nil in all other cases
                       form))
 
   ExecTrace
@@ -65,7 +63,6 @@
   FnCallTrace
   (process [{:keys [flow-id thread-id form-id] :as trace}]
     (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)]
-
       (state/update-fn-call-stats dbg-state flow-id thread-id trace)
 
       (when (zero? (indexer/thread-exec-count indexer))
