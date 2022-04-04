@@ -150,11 +150,10 @@
     (let [trace-frame (.get trace-idx->frame (int trace-idx))]
       (get-call-trace-idx trace-frame))))
 
-(defn make-callstack-tree [fn-call-trace trace-idx]
-  (let [first-frame (make-callstack-frame fn-call-trace trace-idx)
+(defn make-callstack-tree []
+  (let [first-frame (make-callstack-frame {} nil) ;; nil frame as a root frame
         first-node (make-callstack-tree-node first-frame)
         stack (ArrayDeque.)
         trace->frame (HashMap.)] ;; Keys on this map are Integers, don't search for longs
     (.push stack first-node)
-    (.put trace->frame trace-idx first-frame)
     (->CallStackTree first-node stack trace->frame)))

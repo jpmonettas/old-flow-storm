@@ -46,7 +46,7 @@
 
 (defn trace-form-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id args-vec ns def-kind dispatch-val]} form]
+  [{:keys [form-id args-vec ns def-kind dispatch-val] :as t} form]  
   (let [thread-id (.getId (Thread/currentThread))]
     (when-not (contains? @*init-traced-forms* [*flow-id* thread-id form-id])
       (let [trace (map->FormInitTrace {:flow-id *flow-id*

@@ -8,7 +8,7 @@
   (:import [java.util ArrayList HashMap]))
 
 (deftype MutableTraceIndexer [^ArrayList traces
-                              ^:unsynchronized-mutable callstack-tree
+                               callstack-tree
                               ^HashMap forms
                               ^HashMap forms-hot-traces]
 
@@ -31,9 +31,7 @@
   (add-fn-call-trace [this trace]
     (let [next-idx (.size traces)]
 
-      (if (zero? next-idx)
-        (set! callstack-tree (callstack-tree/make-callstack-tree trace next-idx))
-        (callstack-tree/process-fn-call-trace callstack-tree next-idx trace))
+      (callstack-tree/process-fn-call-trace callstack-tree next-idx trace)
 
       (.add traces trace)))
 
@@ -123,6 +121,6 @@
 
 (defn make-indexer []
   (->MutableTraceIndexer (ArrayList.)
-                         nil
+                         (callstack-tree/make-callstack-tree)
                          (HashMap.)
                          (HashMap.)))

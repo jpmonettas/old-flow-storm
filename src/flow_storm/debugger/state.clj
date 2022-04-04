@@ -136,20 +136,22 @@
             curr-val (or (.getOrDefault fn-call-stats k 0))]
         (.put fn-call-stats k (inc curr-val)))))
 
-  (fn-call-stats [this flow-id thread-id]
+  (fn-call-stats [this target-flow-id target-thread-id]
     (locking fn-call-stats
-      (let [indexer (thread-trace-indexer this flow-id thread-id)]
+      (let [indexer (thread-trace-indexer this target-flow-id target-thread-id)]
        (->> (.entrySet fn-call-stats)
-            (map (fn [^Map$Entry entry]
-                   (let [[_ _ fn-ns fn-name form-id] (.getKey entry)
+            (keep (fn [^Map$Entry entry]
+                   (let [[flow-id thread-id fn-ns fn-name form-id] (.getKey entry)
                          {:keys [form/form form/def-kind multimethod/dispatch-val] :as xx} (indexer/get-form indexer form-id)]
-                     {:fn-ns fn-ns
-                      :fn-name fn-name
-                      :form-id form-id
-                      :form form
-                      :form-def-kind def-kind
-                      :dispatch-val dispatch-val
-                      :cnt (.getValue entry)})))))))
+                     (when (and (= target-flow-id flow-id)
+                                (= target-thread-id thread-id))
+                       {:fn-ns fn-ns
+                        :fn-name fn-name
+                        :form-id form-id
+                        :form form
+                        :form-def-kind def-kind
+                        :dispatch-val dispatch-val
+                        :cnt (.getValue entry)}))))))))
 
   (clear-flow-fn-call-stats [this flow-id]
     (locking fn-call-stats

@@ -122,8 +122,9 @@
                                                          :defmethod       (format "M %s/%s %s" fn-ns fn-name dispatch-val)
                                                          :extend-protocol (format "P %s/%s" fn-ns fn-name)
                                                          :extend-type     (format "T %s/%s" fn-ns fn-name)
-                                                         :defn            (format "F %s/%s" fn-ns fn-name)))
-                                           (.setPrefWidth 300))
+                                                         :defn            (format "F %s/%s" fn-ns fn-name)
+                                                         (format "F %s/%s" fn-ns fn-name)))
+                                           (.setPrefWidth 500))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))
                                   hbox (HBox. (into-array Node [fn-lbl cnt-lbl]))]
@@ -134,24 +135,24 @@
         instrument-list-selection (.getSelectionModel instrument-list-view)
         ctx-menu-options [{:text "Un-instrument seleced functions"
                            :on-click (fn []
-                                       (let [groups (group-by (fn [{:keys [form-def-kind]}]
-                                                                (if (= form-def-kind :defn)
-                                                                  :vars
-                                                                  :forms))
-                                                              (.getSelectedItems instrument-list-selection))]
+                                       (let [groups (->> (.getSelectedItems instrument-list-selection)
+                                                         (group-by (fn [{:keys [form-def-kind]}]
+                                                                     (cond
+                                                                       (#{:defn} form-def-kind) :vars
+                                                                       (#{:defmethod :extend-protocol :extend-type} form-def-kind) :forms
+                                                                       :else nil))))]
 
-                                         (let [vars-symbs (map (fn [{:keys [fn-name fn-ns]}]
-                                                                 (symbol fn-ns fn-name))
-                                                               (:vars groups))]
+                                         (let [vars-symbs (->> (:vars groups)
+                                                               (map (fn [{:keys [fn-name fn-ns]}]
+                                                                      (symbol fn-ns fn-name))))]
                                            (target-commands/run-command :uninstrument-fn-bulk vars-symbs))
 
-                                         (let [forms (map (fn [{:keys [fn-ns form]}]
-                                                            {:form-ns fn-ns
-                                                             :form form})
-                                                          (:forms groups))]
+                                         (let [forms (->> (:forms groups)
+                                                          (map (fn [{:keys [fn-ns form]}]
+                                                                 {:form-ns fn-ns
+                                                                  :form form})))]
                                            (target-commands/run-command :eval-form-bulk forms))))}]
-        ctx-menu (ui-utils/make-context-menu ctx-menu-options)
-        ]
+        ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
 
     (.setOnMouseClicked instrument-list-view
                         (event-handler
@@ -241,26 +242,29 @@
   ;; Important !
   ;; this will be called for all visible tree nodes after any expansion
   ;; so it should be fast
-  (let [ns-lbl (Label. (str fn-ns "/"))
-        fn-name-lbl (doto (Label. fn-name)
-                      (.setStyle "-fx-font-weight: bold;"))
-        args-lbl (Label. (str " " (format-value-short args)))
-        node-box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
-        ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
-                           :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
-                          {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
-                           :on-click #(do
-                                        (state/callstack-tree-hide-fn dbg-state flow-id thread-id fn-name fn-ns)
-                                        (update-call-stack-tree-pane flow-id thread-id))}]
-        ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
-    (doto node-box
-      (.setOnMouseClicked (event-handler
-                           [^MouseEvent mev]
-                           (when (= MouseButton/SECONDARY (.getButton mev))
-                             (.show ctx-menu
-                                    node-box
-                                    (.getScreenX mev)
-                                    (.getScreenY mev))))))))
+  (if-not call-trace-idx
+    (HBox. (into-array Node [(Label. "-")]))
+
+    (let [ns-lbl (Label. (str fn-ns "/"))
+          fn-name-lbl (doto (Label. fn-name)
+                        (.setStyle "-fx-font-weight: bold;"))
+          args-lbl (Label. (str " " (format-value-short args)))
+          box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
+          ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
+                             :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
+                            {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
+                             :on-click #(do
+                                          (state/callstack-tree-hide-fn dbg-state flow-id thread-id fn-name fn-ns)
+                                          (update-call-stack-tree-pane flow-id thread-id))}]
+          ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
+      (doto box
+        (.setOnMouseClicked (event-handler
+                             [^MouseEvent mev]
+                             (when (= MouseButton/SECONDARY (.getButton mev))
+                               (.show ctx-menu
+                                      box
+                                      (.getScreenX mev)
+                                      (.getScreenY mev)))))))))
 
 (defn- select-call-stack-tree-node [flow-id thread-id match-trace-idx]
   (let [[tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))
@@ -330,7 +334,8 @@
 
                                (let [frame (indexer/callstack-node-frame indexer tree-node)
                                      frame-trace-idx (:call-trace-idx frame)
-                                     expanded? (state/callstack-tree-item-expanded? dbg-state flow-id thread-id frame-trace-idx)
+                                     expanded? (or (nil? frame-trace-idx)
+                                                   (state/callstack-tree-item-expanded? dbg-state flow-id thread-id frame-trace-idx))
                                      tree-item (.getTreeItem this)]
 
                                  (doto this
