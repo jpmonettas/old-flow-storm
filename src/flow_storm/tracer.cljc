@@ -13,8 +13,15 @@
 (def ^ArrayBlockingQueue trace-queue nil)
 (defonce ^Thread send-thread nil)
 
-(def ^:dynamic *flow-id* nil)
-(def ^:dynamic *init-traced-forms* nil)
+;; (def ^:dynamic *flow-id* nil)
+;; (def ^:dynamic *init-traced-forms* nil)
+(def ^:dynamic *runtime-ctx* nil)
+
+(defn empty-runtime-ctx
+  ([] (empty-runtime-ctx nil))
+  ([flow-id]
+   {:flow-id (or flow-id (rand-int 1000))
+    :init-traced-forms (atom #{})}))
 
 (defrecord FlowInitTrace [flow-id form-ns form timestamp])
 (defrecord FormInitTrace [flow-id form-id thread-id form ns def-kind mm-dispatch-val timestamp])
@@ -46,10 +53,11 @@
 
 (defn trace-form-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id args-vec ns def-kind dispatch-val] :as t} form]  
-  (let [thread-id (.getId (Thread/currentThread))]
-    (when-not (contains? @*init-traced-forms* [*flow-id* thread-id form-id])
-      (let [trace (map->FormInitTrace {:flow-id *flow-id*
+  [{:keys [form-id args-vec ns def-kind dispatch-val] :as t} form]
+  (let [{:keys [flow-id init-traced-forms]} *runtime-ctx*        
+        thread-id (.getId (Thread/currentThread))]
+    (when-not (contains? @init-traced-forms [flow-id thread-id form-id])
+      (let [trace (map->FormInitTrace {:flow-id flow-id
                                        :form-id form-id
                                        :thread-id thread-id
                                        :form form
@@ -58,12 +66,13 @@
                                        :mm-dispatch-val dispatch-val
                                        :timestamp (get-timestamp)})]
         (.put trace-queue trace)
-        (swap! *init-traced-forms* conj [*flow-id* thread-id form-id])))))
+        (swap! init-traced-forms conj [flow-id thread-id form-id])))))
 
 (defn trace-expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
-  [result err {:keys [coor outer-form? form-id]}]
-  (let [trace (map->ExecTrace {:flow-id *flow-id*
+  [result err {:keys [coor outer-form? form-id] :as t}]
+  (let [{:keys [flow-id]} *runtime-ctx*
+        trace (map->ExecTrace {:flow-id flow-id
                                :form-id form-id
                                :coor coor
                                :thread-id (.getId (Thread/currentThread))
@@ -74,7 +83,8 @@
     result))
 
 (defn trace-fn-call-trace [form-id ns fn-name args-vec]
-  (let [trace (map->FnCallTrace {:flow-id *flow-id*
+  (let [{:keys [flow-id]} *runtime-ctx*
+        trace (map->FnCallTrace {:flow-id flow-id
                                  :form-id form-id
                                  :fn-name fn-name
                                  :fn-ns ns
@@ -86,7 +96,8 @@
 (defn trace-bound-trace
   "Instrumentation function. Sends the `:bind-trace` trace"
   [symb val {:keys [coor form-id]}]
-  (let [trace (map->BindTrace {:flow-id *flow-id*
+  (let [{:keys [flow-id]} *runtime-ctx*
+        trace (map->BindTrace {:flow-id flow-id
                                :form-id form-id
                                :coor (or coor [])
                                :thread-id (.getId (Thread/currentThread))

@@ -19,7 +19,7 @@
 ;; the same you can get with the &env in defmacro
 (def ^:dynamic *environment*)
 
-(declare instrument-outer-forms)
+(declare instrument-outer-form)
 
 (defn merge-meta
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
@@ -279,26 +279,21 @@
                                                                              (dissoc :defn-def))
 
                                                                     lazy-seq-fn? (lazy-seq-form? (first arity-body-forms))
-                                                                    inst-arity-body (if (or (and (disable :anonymous-fn) (not defn-def))
-                                                                                            (excluding-fns (symbol form-ns (str fn-name)))
-                                                                                            lazy-seq-fn?)
-                                                                                      ;; SKIP instrumentation
-                                                                                      ;;
-                                                                                      ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
-                                                                                      ;; recursion and we risk getting a StackOverflow.
-                                                                                      ;; If we can't wrap the output we can't wrap the call neither since
-                                                                                      ;; they are sinchronized, so we skip this fn* body tracing
-                                                                                      (do
+                                                                    inst-arity-body-form (if (or (and (disable :anonymous-fn) (not defn-def))
+                                                                                                 (excluding-fns (symbol form-ns (str fn-name)))
+                                                                                                 lazy-seq-fn?)
+                                                                                           ;; SKIP instrumentation
+                                                                                           ;;
+                                                                                           ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
+                                                                                           ;; recursion and we risk getting a StackOverflow.
+                                                                                           ;; If we can't wrap the output we can't wrap the call neither since
+                                                                                           ;; they are sinchronized, so we skip this fn* body tracing
+                                                                                           `(do ~@arity-body-forms)
 
-                                                                                        #_(when lazy-seq-fn?
-                                                                                          (println (format "Warning skipping fn* body instrumentation on (%s) because it returns a lazy-seq" form-ns)))
-
-                                                                                        arity-body-forms)
-
-                                                                                      (instrument-outer-forms ctx'
-                                                                                                              (instrument-coll arity-body-forms ctx')
-                                                                                                              outer-preamble))]
-                                                                (-> `(~arity-args-vec ~@inst-arity-body)
+                                                                                           (instrument-outer-form ctx'
+                                                                                                                  (instrument-coll arity-body-forms ctx')
+                                                                                                                  outer-preamble))]
+                                                                (-> `(~arity-args-vec ~inst-arity-body-form)
                                                                     (merge-meta (meta arity)))))
                                [fn-name arities-bodies-seq] (cond
 
@@ -656,11 +651,17 @@
       (instrument ctx)
       (strip-instrumentation-meta)))
 
-(defn instrument-outer-forms
+(defn instrument-outer-form
   "Add some special instrumentation that is needed only on the outer form."
-  [{:keys [orig-form args-vec fn-name form-ns form-id on-fn-call-fn] :as ctx} forms preamble]
-  (-> preamble
-      (into [(instrument-form (conj forms 'do) [] (assoc ctx :outer-form? true))])))
+  [{:keys [orig-form args-vec fn-name form-ns form-id on-flow-start-fn] :as ctx} forms preamble]
+  `(let [curr-ctx# flow-storm.tracer/*runtime-ctx*]
+     (binding [flow-storm.tracer/*runtime-ctx* (or curr-ctx# (flow-storm.tracer/empty-runtime-ctx))]
+
+       (when-not curr-ctx#
+         (~on-flow-start-fn (:flow-id flow-storm.tracer/*runtime-ctx*) ~form-ns ~orig-form))
+
+       ~@(-> preamble
+             (into [(instrument-form (conj forms 'do) [] (assoc ctx :outer-form? true))])))))
 
 ;;;;;;;;;;;;;;;;
 ;; @@@ Hacky  ;;
@@ -688,6 +689,7 @@
      :on-bind-fn            'flow-storm.tracer/trace-bound-trace
      :on-fn-call-fn         'flow-storm.tracer/trace-fn-call-trace
      :on-outer-form-init-fn 'flow-storm.tracer/trace-form-init-trace
+     :on-flow-start-fn      'flow-storm.tracer/trace-flow-init-trace
      :environment      env
      :compiler         (if (contains? env :js-globals)
                          :cljs
@@ -731,7 +733,7 @@
                                                        :orig-form orig-form
                                                        :fn-name (str fn-name))
 
-                                                instrument-outer-forms)]
+                                                instrument-outer-form)]
                                (list 'set! xarity inst-bodies))))
                               xsets)
         inst-code `(do ~xdef ~@inst-sets-forms)]

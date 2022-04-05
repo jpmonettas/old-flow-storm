@@ -122,10 +122,9 @@
   [{:keys [orig-form ns flow-id]} form]
   `(let [flow-id# ~(or flow-id 0)
          curr-ns# ~(or ns `(str (ns-name *ns*)))]
-     (alter-var-root #'tracer/*init-traced-forms* (constantly (atom #{})))
-     (alter-var-root #'tracer/*flow-id* (constantly flow-id#))
-     (tracer/trace-flow-init-trace flow-id# curr-ns# ~(or orig-form (list 'quote form)))
-     ~form))
+     (binding [tracer/*runtime-ctx* (tracer/empty-runtime-ctx flow-id#)]
+       (tracer/trace-flow-init-trace flow-id# curr-ns# ~(or orig-form (list 'quote form)))
+       ~form)))
 
 (defn re-run-flow [flow-id {:keys [ns form]}]
   (binding [*ns* (find-ns (symbol ns))]
