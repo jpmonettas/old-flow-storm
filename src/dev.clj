@@ -18,14 +18,17 @@
   (fs-api/local-connect)
 
   (fs-api/trace-files-for-namespaces #{"dev-tester"}
-                                     {})
+                                     {:disable #{} #_#{:expr :anonymous-fn :binding}})
 
   ;; add some data for dev
   (fs-api/run-with-execution-ctx
    {:flow-id 0
     :ns "dev"}
    (dev-tester/boo [2 "hello" 8]))
+
   )
+
+(add-tap (bound-fn* pp/pprint))
 
 (defn local-restart-everything []
   (tracer/stop-send-thread)
@@ -34,7 +37,7 @@
   ;; reload all namespaces
   (refresh :after 'dev/start-and-add-data))
 
-(add-tap (bound-fn* pp/pprint))
+
 
 (Thread/setDefaultUncaughtExceptionHandler
    (reify

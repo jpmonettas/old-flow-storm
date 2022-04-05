@@ -3,7 +3,8 @@
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
             [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
-            [flow-storm.debugger.ui.state-vars :as state-vars])
+            [flow-storm.debugger.ui.state-vars :as state-vars]
+            [clojure.java.io :as io])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
            [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
@@ -18,31 +19,30 @@
     (run-later
      (.setText trace-cnt-lbl (str cnt)))))
 
-(defn trace-counter-box []
-  (let [box (HBox.) ; spacing
-        trace-cnt-label (Label. "0")]
-    (store-obj "trace_count_label" trace-cnt-label)
-    (-> box
-        .getChildren
-        (.addAll [(Label. "Processed traces:")
-                  trace-cnt-label]))
+(defn bottom-box []
+  (let [box (HBox.)]
     box))
 
 (defn main-tabs-pane []
   (let [tabs-p (TabPane.)
         tabs (.getTabs tabs-p)
-        flows-tab (doto (Tab. "Flows")
+        flows-tab (doto (ui-utils/tab "Flows" "vertical-tab")
                     (.setContent (ui-flows/main-pane)))
         refs-tab (doto (Tab. "Refs")
-                   (.setContent (Label. "Refs comming soon")))
+                   (.setContent (Label. "Refs comming soon"))
+                   (.setDisable true))
         taps-tab (doto (Tab. "Taps")
-                   (.setContent (Label. "Taps comming soon")))
+                   (.setContent (Label. "Taps comming soon"))
+                   (.setDisable true))
         timeline-tab (doto (Tab. "Timeline")
-                       (.setContent (Label. "Timeline comming soon")))
+                       (.setContent (Label. "Timeline comming soon"))
+                       (.setDisable true))
         browser-tab (doto (Tab. "Browser")
-                       (.setContent (Label. "Browser comming soon")))
+                      (.setContent (Label. "Browser comming soon"))
+                      (.setDisable true))
         docs-tab (doto (Tab. "Docs")
-                       (.setContent (Label. "Docs comming soon")))]
+                   (.setContent (Label. "Docs comming soon"))
+                   (.setDisable true))]
     (doto tabs-p
       (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE)
 
@@ -62,7 +62,8 @@
 (defn build-main-pane []
   (let [mp (doto (BorderPane.)
              (.setCenter (main-tabs-pane))
-             (.setBottom (trace-counter-box)))]
+             (.setBottom (bottom-box))
+             (.setStyle "-fx-font-family: 'Roboto Medium';"))]
     mp))
 
 (defn reset-scene-main-pane []
@@ -78,6 +79,7 @@
   (ui-utils/run-now
    (try
      (let [scene (Scene. (build-main-pane) 1024 768)]
+
        (doto scene
          (.setOnKeyPressed (event-handler
                             [kev]
@@ -91,6 +93,10 @@
 
                                 :else
                                 (tap> (format "Unhandled keypress %s" key-name)))))))
+
+       (doto (.getStylesheets scene)
+         (.add (str (io/resource "fonts.css")))
+         (.add (str (io/resource "styles.css"))))
 
        (alter-var-root #'scene (constantly scene))
        (alter-var-root #'stage (constantly (doto (Stage.)

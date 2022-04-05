@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
  ;; TODO: Try to remove a dependency on this one
  :deps {org.clojure/clojurescript {;;:mvn/version "1.10.773"
                                    :local/root "/home/jmonetta/my-projects/clojurescript"
@@ -16,6 +16,8 @@
         org.openjfx/javafx-web {:mvn/version "18"}
         org.openjfx/javafx-swing {:mvn/version "18"}
 
+        org.kordamp.ikonli/ikonli-javafx {:mvn/version "11.5.0"}
+        org.kordamp.ikonli/ikonli-materialdesign-pack {:mvn/version "11.5.0"}
         }
 
  :jvm-opts []

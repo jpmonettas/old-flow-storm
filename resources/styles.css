@@ -1,0 +1,24 @@
+.vertical-tab:selected {
+	-fx-background-color: #4743ba;
+    
+}
+
+.vertical-tab:selected .tab-label { 
+	-fx-text-fill: white;
+}
+
+.button {
+	-fx-background-color: #888;   
+}
+
+.button:focused { /* this is so buttons doesn't look smaller when they are focused */
+	-fx-background-insets: 0 0 -1 0;
+}
+
+.button .ikonli-font-icon {
+	-fx-icon-color: white;
+}
+
+.tree-search {
+	-fx-background-insets: 1 0 1 0;
+}

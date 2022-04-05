@@ -1,6 +1,7 @@
 (ns flow-storm.debugger.ui.utils
-  (:import [javafx.scene.control ContextMenu MenuItem ScrollPane ListCell]
-           [javafx.scene Node]))
+  (:import [javafx.scene.control Button ContextMenu MenuItem ScrollPane ListCell Tab]
+           [javafx.scene Node]
+           [org.kordamp.ikonli.javafx FontIcon]))
 
 (defn run-later*
   [f]
@@ -66,3 +67,18 @@
       (if empty?
         (.setGraphic ^Node this nil)
         (update-item-fn this item)))))
+
+(defn icon-button
+  ([icon-name]
+   (icon-button icon-name nil))
+  ([icon-name class]
+   (let [b (doto (Button.)
+             (.setGraphic (FontIcon. icon-name)))]
+     (when class
+       (.add (.getStyleClass b) class))
+     b)))
+
+(defn tab [text class]
+  (let [t (Tab. text)]
+    (.add (.getStyleClass t) class)
+    t))

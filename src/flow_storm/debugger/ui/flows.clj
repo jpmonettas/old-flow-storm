@@ -25,9 +25,18 @@
                                                                                       (CornerRadii. 0)
                                                                                       (Insets. 0))])))
 
-(def form-background-highlighted (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#ffffab")
+(def form-background-highlighted (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#ebecff")
                                                                                       (CornerRadii. 0)
                                                                                       (Insets. 0))])))
+
+(defn def-kind-color-style [kind]
+  (format "-fx-text-fill: %s;"
+          (case kind
+            :defmethod       "#9c0084"
+            :extend-protocol "#369658"
+            :extend-type     "#369658"
+            :defn            "#222"
+            "#222")))
 
 (defn- format-value-short [v]
   (let [max-len 80
@@ -105,6 +114,7 @@
         pprint-tab (doto (Tab. "Pprint")
                      (.setContent (create-pprint-pane flow-id thread-id "expr_result")))
         tree-tab (doto (Tab. "Tree")
+                   (.setDisable true)
                    (.setContent (create-result-tree-pane flow-id thread-id)))]
     (-> tools-tab-pane
         .getTabs
@@ -119,12 +129,13 @@
                          (ui-utils/create-list-cell-factory
                           (fn [list-cell {:keys [form-def-kind fn-name fn-ns form-id dispatch-val cnt]}]
                             (let [fn-lbl (doto (Label. (case form-def-kind
-                                                         :defmethod       (format "M %s/%s %s" fn-ns fn-name dispatch-val)
-                                                         :extend-protocol (format "P %s/%s" fn-ns fn-name)
-                                                         :extend-type     (format "T %s/%s" fn-ns fn-name)
-                                                         :defn            (format "F %s/%s" fn-ns fn-name)
+                                                         :defmethod       (format "%s/%s %s" fn-ns fn-name dispatch-val)
+                                                         :extend-protocol (format "%s/%s" fn-ns fn-name)
+                                                         :extend-type     (format "%s/%s" fn-ns fn-name)
+                                                         :defn            (format "%s/%s" fn-ns fn-name)
                                                          (format "F %s/%s" fn-ns fn-name)))
-                                           (.setPrefWidth 500))
+                                           (.setPrefWidth 500)
+                                           (.setStyle (def-kind-color-style form-def-kind)))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))
                                   hbox (HBox. (into-array Node [fn-lbl cnt-lbl]))]
@@ -238,18 +249,33 @@
 
     (.setRoot ^TreeView tree-view root-item)))
 
-(defn- create-call-stack-tree-node [{:keys [call-trace-idx fn-name fn-ns args]} flow-id thread-id]
+(defn format-tree-fn-call-args [args-vec]
+  (let [step-1 (format-value-short args-vec)]
+    (if (= \. (.charAt step-1 (dec (count step-1))))
+      (subs step-1 1 (count step-1))
+      (subs step-1 1 (dec (count step-1))))))
+
+(defn- create-call-stack-tree-node [{:keys [call-trace-idx form-id fn-name fn-ns args]} flow-id thread-id]
   ;; Important !
   ;; this will be called for all visible tree nodes after any expansion
   ;; so it should be fast
   (if-not call-trace-idx
-    (HBox. (into-array Node [(Label. "-")]))
+    (doto (ui-utils/icon-button "mdi-reload")
+      (.setOnAction (event-handler
+                     [_]
+                     (update-call-stack-tree-pane flow-id thread-id))))
 
-    (let [ns-lbl (Label. (str fn-ns "/"))
+    (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+          {:keys [multimethod/dispatch-val form/def-kind]} (indexer/get-form indexer form-id)
+          ns-lbl (doto (Label. (str fn-ns "/"))
+                   (.setStyle "-fx-text-fill: #999;"))
           fn-name-lbl (doto (Label. fn-name)
-                        (.setStyle "-fx-font-weight: bold;"))
-          args-lbl (Label. (str " " (format-value-short args)))
-          box (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
+                        (.setStyle (def-kind-color-style def-kind)))
+          args-lbl (doto (Label. (str " " (format-tree-fn-call-args args)))
+                     (.setStyle "-fx-text-fill: #777;"))
+          fn-call-box (if dispatch-val
+                        (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl (Label. (str dispatch-val)) args-lbl (Label. ")")]))
+                        (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")])))
           ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
                              :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
                             {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
@@ -257,12 +283,12 @@
                                           (state/callstack-tree-hide-fn dbg-state flow-id thread-id fn-name fn-ns)
                                           (update-call-stack-tree-pane flow-id thread-id))}]
           ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
-      (doto box
+      (doto fn-call-box
         (.setOnMouseClicked (event-handler
                              [^MouseEvent mev]
                              (when (= MouseButton/SECONDARY (.getButton mev))
                                (.show ctx-menu
-                                      box
+                                      fn-call-box
                                       (.getScreenX mev)
                                       (.getScreenY mev)))))))))
 
@@ -274,11 +300,16 @@
 
 (defn- create-tree-search-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
-        search-txt (TextField.)
-        search-from-txt (TextField. "0")
-        search-lvl-txt (TextField. "1")
+        search-txt (doto (TextField.)
+                     (.setPromptText "Search"))
+        search-from-txt (doto (TextField. "0")
+                          (.setPrefWidth 70)
+                          (.setAlignment Pos/CENTER))
+        search-lvl-txt (doto (TextField. "2")
+                         (.setPrefWidth 30)
+                         (.setAlignment Pos/CENTER))
         search-match-lbl (Label. "")
-        search-btn (Button. "Search")
+        search-btn (ui-utils/icon-button "mdi-magnify" "tree-search")
         _ (doto search-btn
               (.setOnAction (event-handler
                              [_]
@@ -311,18 +342,17 @@
                                                       (ui-utils/run-later
                                                        (.setText search-match-lbl (format "%.2f %%" (double progress-perc))))))]
                                ))))]
-    (HBox. (into-array Node [(Label. "Search: ") search-txt
-                             (Label. "From: ")   search-from-txt
-                             (Label. "Args print level : ") search-lvl-txt
-                             search-btn
-                             search-match-lbl]))))
+    (doto (HBox. 3.0 (into-array Node [search-match-lbl
+                                       search-txt
+                                       (Label. "From Idx: ")   search-from-txt
+                                       (Label. "*print-level* : ") search-lvl-txt
+                                       search-btn]))
+      (.setAlignment Pos/CENTER_RIGHT)
+      (.setPadding (Insets. 4.0)))))
 
 (defn- create-call-stack-tree-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
-        update-btn (doto (Button. "Update")
-                     (.setOnAction (event-handler
-                                    [_]
-                                    (update-call-stack-tree-pane flow-id thread-id))))
+
         cell-factory (proxy [javafx.util.Callback] []
                        (call [tv]
                          (proxy [TreeCell] []
@@ -365,8 +395,12 @@
                     (.setCellFactory cell-factory))
         tree-view-sel-model (.getSelectionModel tree-view)
         callstack-fn-args-pane   (create-pprint-pane flow-id thread-id "fn_args")
-        callstack-fn-ret-pane (create-pprint-pane flow-id thread-id "fn_ret")]
-
+        callstack-fn-ret-pane (create-pprint-pane flow-id thread-id "fn_ret")
+        labeled-args-pane  (VBox. (into-array Node [(Label. "Args:") callstack-fn-args-pane]))
+        labeled-ret-pane (VBox. (into-array Node [(Label. "Ret:") callstack-fn-ret-pane]))
+        args-ret-pane (HBox. 5.0 (into-array Node [labeled-args-pane labeled-ret-pane]))]
+    (HBox/setHgrow labeled-args-pane Priority/ALWAYS)
+    (HBox/setHgrow labeled-ret-pane Priority/ALWAYS)
     (.addListener (.selectedItemProperty tree-view-sel-model)
                   (proxy [ChangeListener] []
                     (changed [changed old-val new-val]
@@ -376,20 +410,19 @@
                           (update-pprint-pane flow-id thread-id "fn_ret" ret))))))
 
     (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
-    (VBox. (into-array Node [update-btn
-                             search-pane
-                             tree-view
-                             (Label. "Args:") callstack-fn-args-pane
-                             (Label. "Ret:") callstack-fn-ret-pane]))))
+    (VBox/setVgrow tree-view Priority/ALWAYS)
+    (doto (VBox. (into-array Node [search-pane
+                                   tree-view
+                                   args-ret-pane])))))
 
 
 (defn- highlight-executing [^Text token-text]
   (doto token-text
-    (.setFill (Color/RED))))
+    (.setFill (Color/web "#459e11"))))
 
 (defn- highlight-interesting [^Text token-text]
   (doto token-text
-    (.setFill (Color/web "#32a852"))))
+    (.setFill (Color/web "#de00c0"))))
 
 (defn- arm-interesting [^Text token-text traces]
   (let [{:keys [flow-id thread-id]} (first traces)]
@@ -428,7 +461,9 @@
                                                :sp   " "
                                                (first tok)))
                                        coord (when (vector? tok) (second tok))]
-                                   (.setFont text text-font)
+                                   (doto text
+                                     (.setFill (Color/web "#0b0d2e"))
+                                     (.setFont text-font))
                                    (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
                                    text))))
         ns-label (doto (Label. (format "ns: %s" (:form/ns form)))
@@ -437,6 +472,7 @@
         form-header (doto (HBox. (into-array Node [ns-label]))
                       (.setAlignment (Pos/TOP_RIGHT)))
         form-text-flow (TextFlow. (into-array Text tokens-texts))
+
         form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
                     (.setBackground form-background-normal)
                     (.setStyle "-fx-padding: 10;"))
@@ -575,7 +611,7 @@
         (state/set-trace-idx dbg-state flow-id thread-id next-trace-idx)))))
 
 (defn- create-thread-controls-pane [flow-id thread-id]
-  (let [prev-btn (doto (Button. "<")
+  (let [prev-btn (doto (ui-utils/icon-button "mdi-chevron-left")
                    (.setOnAction (event-handler
                                   [ev]
                                   (jump-to-coord flow-id
@@ -586,19 +622,22 @@
         thread-trace-count-lbl (Label. "-")
         _ (store-obj flow-id (state-vars/thread-curr-trace-lbl-id thread-id) curr-trace-lbl)
         _ (store-obj flow-id (state-vars/thread-trace-count-lbl-id thread-id) thread-trace-count-lbl)
-        next-btn (doto (Button. ">")
+        next-btn (doto (ui-utils/icon-button "mdi-chevron-right")
                    (.setOnAction (event-handler
                                   [ev]
                                   (jump-to-coord flow-id
                                                  thread-id
                                                  (inc (state/current-trace-idx dbg-state flow-id thread-id))))))
-        re-run-flow-btn (doto (Button. "Re run flow")
+        re-run-flow-btn (doto (ui-utils/icon-button "mdi-reload")
                           (.setOnAction (event-handler
                                          [_]
                                          (let [{:keys [flow/execution-expr]} (state/get-flow dbg-state flow-id)]
-                                           (target-commands/run-command :re-run-flow flow-id execution-expr)))))]
+                                           (target-commands/run-command :re-run-flow flow-id execution-expr)))))
+        trace-pos-box (doto (HBox. 2.0 (into-array Node [curr-trace-lbl separator-lbl thread-trace-count-lbl]))
+                        (.setStyle "-fx-alignment: center;"))
+        controls-box (HBox. 2.0 (into-array Node [prev-btn next-btn re-run-flow-btn]))]
 
-    (doto (HBox. (into-array Node [prev-btn curr-trace-lbl separator-lbl thread-trace-count-lbl next-btn re-run-flow-btn]))
+    (doto (HBox. 2.0 (into-array Node [controls-box trace-pos-box]))
       (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;"))))
 
 (defn- create-thread-pane [flow-id thread-id]
