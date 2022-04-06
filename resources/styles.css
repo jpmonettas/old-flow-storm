@@ -1,3 +1,11 @@
+@font-face {
+    src: url('fonts/Roboto-Light.ttf');
+}
+
+@font-face {
+    src: url('fonts/Roboto-Medium.ttf');
+}
+
 .vertical-tab:selected {
 	-fx-background-color: #4743ba;
     

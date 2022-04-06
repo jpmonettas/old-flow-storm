@@ -1,6 +1,6 @@
 (ns flow-storm.debugger.ui.flows
   (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now]]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
@@ -8,7 +8,7 @@
             [clojure.string :as str]
             [flow-storm.utils :as utils]
             [flow-storm.debugger.target-commands :as target-commands])
-  (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
+  (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane Priority Pane HBox VBox]
            [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
             TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
@@ -82,7 +82,7 @@
         (.addAll [flow-tab]))))
 
 (defn- create-forms-pane [flow-id thread-id]
-  (let [box (doto (VBox.)
+  (let [box (doto (v-box [])
               (.setSpacing 5))
         scroll-pane (ScrollPane.)]
     (.setContent scroll-pane box)
@@ -139,7 +139,7 @@
                                            (.setStyle (def-kind-color-style form-def-kind)))
                                   cnt-lbl (doto (Label. (str cnt))
                                             (.setPrefWidth 100))
-                                  hbox (HBox. (into-array Node [fn-lbl cnt-lbl]))]
+                                  hbox (h-box [fn-lbl cnt-lbl])]
                               (.setGraphic ^Node list-cell hbox))))))
         fns-list-view (doto (ListView. observable-fns-list)
                                (.setEditable false)
@@ -242,7 +242,7 @@
                             (.setEditable false)
                             (.setCellFactory list-cell-factory))
         fn-call-list-selection (.getSelectionModel fn-call-list-view)
-        fn-call-list-pane (VBox. (into-array Node [args-print-type-combo fn-call-list-view]))]
+        fn-call-list-pane (v-box [args-print-type-combo fn-call-list-view])]
 
     (VBox/setVgrow fn-call-list-view Priority/ALWAYS)
 
@@ -271,7 +271,7 @@
         fn-calls-list-pane (create-fn-calls-list-pane flow-id thread-id)]
     (HBox/setHgrow fns-list-pane Priority/ALWAYS)
     (HBox/setHgrow fn-calls-list-pane Priority/ALWAYS)
-    (HBox. (into-array Node [fns-list-pane fn-calls-list-pane]))))
+    (h-box [fns-list-pane fn-calls-list-pane])))
 
 (defn- update-instrument-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
@@ -290,7 +290,7 @@
                             (let [symb-lbl (doto (Label. (first symb-val))
                                              (.setPrefWidth 100))
                                   val-lbl (Label.  (format-value-short (second symb-val)))
-                                  hbox (HBox. (into-array Node [symb-lbl val-lbl]))]
+                                  hbox (h-box [symb-lbl val-lbl])]
                               (.setGraphic ^Node list-cell hbox))))))
         locals-list-view (doto (ListView. observable-bindings-list)
                            (.setEditable false)
@@ -369,8 +369,8 @@
           args-lbl (doto (Label. (str " " (format-tree-fn-call-args args)))
                      (.setStyle "-fx-text-fill: #777;"))
           fn-call-box (if dispatch-val
-                        (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl (Label. (str dispatch-val)) args-lbl (Label. ")")]))
-                        (HBox. (into-array Node [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")])))
+                        (h-box [(Label. "(") ns-lbl fn-name-lbl (Label. (str dispatch-val)) args-lbl (Label. ")")])
+                        (h-box [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
           ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
                              :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
                             {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
@@ -437,11 +437,12 @@
                                                       (ui-utils/run-later
                                                        (.setText search-match-lbl (format "%.2f %%" (double progress-perc))))))]
                                ))))]
-    (doto (HBox. 3.0 (into-array Node [search-match-lbl
-                                       search-txt
-                                       (Label. "From Idx: ")   search-from-txt
-                                       (Label. "*print-level* : ") search-lvl-txt
-                                       search-btn]))
+    (doto (h-box [search-match-lbl
+                  search-txt
+                  (Label. "From Idx: ")   search-from-txt
+                  (Label. "*print-level* : ") search-lvl-txt
+                  search-btn])
+      (.setSpacing 3.0)
       (.setAlignment Pos/CENTER_RIGHT)
       (.setPadding (Insets. 4.0)))))
 
@@ -491,9 +492,10 @@
         tree-view-sel-model (.getSelectionModel tree-view)
         callstack-fn-args-pane   (create-pprint-pane flow-id thread-id "fn_args")
         callstack-fn-ret-pane (create-pprint-pane flow-id thread-id "fn_ret")
-        labeled-args-pane  (VBox. (into-array Node [(Label. "Args:") callstack-fn-args-pane]))
-        labeled-ret-pane (VBox. (into-array Node [(Label. "Ret:") callstack-fn-ret-pane]))
-        args-ret-pane (HBox. 5.0 (into-array Node [labeled-args-pane labeled-ret-pane]))]
+        labeled-args-pane  (v-box [(Label. "Args:") callstack-fn-args-pane])
+        labeled-ret-pane (v-box [(Label. "Ret:") callstack-fn-ret-pane])
+        args-ret-pane (doto (h-box [labeled-args-pane labeled-ret-pane])
+                        (.setSpacing 5.0))]
     (HBox/setHgrow labeled-args-pane Priority/ALWAYS)
     (HBox/setHgrow labeled-ret-pane Priority/ALWAYS)
     (.addListener (.selectedItemProperty tree-view-sel-model)
@@ -506,9 +508,9 @@
 
     (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
     (VBox/setVgrow tree-view Priority/ALWAYS)
-    (doto (VBox. (into-array Node [search-pane
-                                   tree-view
-                                   args-ret-pane])))))
+    (v-box [search-pane
+            tree-view
+            args-ret-pane])))
 
 
 (defn- highlight-executing [^Text token-text]
@@ -564,11 +566,11 @@
         ns-label (doto (Label. (format "ns: %s" (:form/ns form)))
                    (.setFont (Font. 10)))
 
-        form-header (doto (HBox. (into-array Node [ns-label]))
+        form-header (doto (h-box [ns-label])
                       (.setAlignment (Pos/TOP_RIGHT)))
         form-text-flow (TextFlow. (into-array Text tokens-texts))
 
-        form-pane (doto (VBox. (into-array Node [form-header form-text-flow]))
+        form-pane (doto (v-box [form-header form-text-flow])
                     (.setBackground form-background-normal)
                     (.setStyle "-fx-padding: 10;"))
         ]
@@ -728,15 +730,18 @@
                                          [_]
                                          (let [{:keys [flow/execution-expr]} (state/get-flow dbg-state flow-id)]
                                            (target-commands/run-command :re-run-flow flow-id execution-expr)))))
-        trace-pos-box (doto (HBox. 2.0 (into-array Node [curr-trace-lbl separator-lbl thread-trace-count-lbl]))
+        trace-pos-box (doto (h-box [curr-trace-lbl separator-lbl thread-trace-count-lbl])
+                        (.setSpacing 2.0)
                         (.setStyle "-fx-alignment: center;"))
-        controls-box (HBox. 2.0 (into-array Node [prev-btn next-btn re-run-flow-btn]))]
+        controls-box (doto (h-box [prev-btn next-btn re-run-flow-btn])
+                       (.setSpacing 2.0))]
 
-    (doto (HBox. 2.0 (into-array Node [controls-box trace-pos-box]))
-      (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;"))))
+    (doto (h-box [controls-box trace-pos-box])
+      (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;")
+      (.setSpacing 2.0))))
 
 (defn- create-thread-pane [flow-id thread-id]
-  (let [thread-pane (VBox.)
+  (let [thread-pane (v-box [])
         thread-controls-pane (create-thread-controls-pane flow-id thread-id)
         thread-tools-tab-pane (doto (TabPane.)
                                (.setTabClosingPolicy TabPane$TabClosingPolicy/UNAVAILABLE)

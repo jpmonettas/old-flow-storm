@@ -1,5 +1,5 @@
 (ns flow-storm.debugger.ui.main
-  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later]]
+  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box v-box]]
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
             [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
@@ -20,7 +20,7 @@
      (.setText trace-cnt-lbl (str cnt)))))
 
 (defn bottom-box []
-  (let [box (HBox.)]
+  (let [box (h-box [])]
     box))
 
 (defn main-tabs-pane []
@@ -95,7 +95,6 @@
                                 (tap> (format "Unhandled keypress %s" key-name)))))))
 
        (doto (.getStylesheets scene)
-         (.add (str (io/resource "fonts.css")))
          (.add (str (io/resource "styles.css"))))
 
        (alter-var-root #'scene (constantly scene))
