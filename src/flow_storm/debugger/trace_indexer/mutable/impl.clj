@@ -80,6 +80,14 @@
   (callstack-frame-call-trace-idx [this trace-idx]
     (callstack-tree/frame-call-trace-index callstack-tree trace-idx))
 
+  (find-fn-calls [this fn-ns fn-name form-id]
+    (->> traces
+         (keep-indexed (fn [idx trace]
+                         (when (and (= fn-ns (:fn-ns trace))
+                                    (= fn-name (:fn-name trace))
+                                    (= form-id (:form-id trace)))
+                           (with-meta trace {:trace-idx idx}))))))
+
   (search-next-fn-call-trace [this search-str from-idx print-level on-result-cb on-progress]
 
     (let [indexer-obj this]

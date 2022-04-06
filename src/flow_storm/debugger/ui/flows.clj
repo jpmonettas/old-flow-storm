@@ -9,12 +9,13 @@
             [flow-storm.utils :as utils]
             [flow-storm.debugger.target-commands :as target-commands])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane HBox Priority Pane VBox]
-           [javafx.scene.control Button CheckBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
+           [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
             TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
            [javafx.scene.text TextFlow Text Font]
            [ javafx.beans.value ChangeListener]
            [javafx.scene Node]
            [javafx.scene.paint Color]
+           [javafx.util StringConverter]
            [javafx.geometry Insets Side Orientation Pos]
            [javafx.collections FXCollections ObservableList]
            [javafx.scene.input MouseEvent MouseButton]))
@@ -122,8 +123,8 @@
 
     tools-tab-pane))
 
-(defn- create-instrument-pane [flow-id thread-id]
-  (let [observable-bindings-list (FXCollections/observableArrayList)
+(defn- create-fns-list-pane [flow-id thread-id]
+  (let [observable-fns-list (FXCollections/observableArrayList)
         cell-factory (proxy [javafx.util.Callback] []
                        (call [lv]
                          (ui-utils/create-list-cell-factory
@@ -140,43 +141,137 @@
                                             (.setPrefWidth 100))
                                   hbox (HBox. (into-array Node [fn-lbl cnt-lbl]))]
                               (.setGraphic ^Node list-cell hbox))))))
-        instrument-list-view (doto (ListView. observable-bindings-list)
+        fns-list-view (doto (ListView. observable-fns-list)
                                (.setEditable false)
                                (.setCellFactory cell-factory))
-        instrument-list-selection (.getSelectionModel instrument-list-view)
-        ctx-menu-options [{:text "Un-instrument seleced functions"
-                           :on-click (fn []
-                                       (let [groups (->> (.getSelectedItems instrument-list-selection)
-                                                         (group-by (fn [{:keys [form-def-kind]}]
-                                                                     (cond
-                                                                       (#{:defn} form-def-kind) :vars
-                                                                       (#{:defmethod :extend-protocol :extend-type} form-def-kind) :forms
-                                                                       :else nil))))]
+        fns-list-selection (.getSelectionModel fns-list-view)
+        ctx-menu-un-instrument-item {:text "Un-instrument seleced functions"
+                                     :on-click (fn []
+                                                 (let [groups (->> (.getSelectedItems fns-list-selection)
+                                                                   (group-by (fn [{:keys [form-def-kind]}]
+                                                                               (cond
+                                                                                 (#{:defn} form-def-kind) :vars
+                                                                                 (#{:defmethod :extend-protocol :extend-type} form-def-kind) :forms
+                                                                                 :else nil))))]
 
-                                         (let [vars-symbs (->> (:vars groups)
-                                                               (map (fn [{:keys [fn-name fn-ns]}]
-                                                                      (symbol fn-ns fn-name))))]
-                                           (target-commands/run-command :uninstrument-fn-bulk vars-symbs))
+                                                   (let [vars-symbs (->> (:vars groups)
+                                                                         (map (fn [{:keys [fn-name fn-ns]}]
+                                                                                (symbol fn-ns fn-name))))]
+                                                     (target-commands/run-command :uninstrument-fn-bulk vars-symbs))
 
-                                         (let [forms (->> (:forms groups)
-                                                          (map (fn [{:keys [fn-ns form]}]
-                                                                 {:form-ns fn-ns
-                                                                  :form form})))]
-                                           (target-commands/run-command :eval-form-bulk forms))))}]
-        ctx-menu (ui-utils/make-context-menu ctx-menu-options)]
+                                                   (let [forms (->> (:forms groups)
+                                                                    (map (fn [{:keys [fn-ns form]}]
+                                                                           {:form-ns fn-ns
+                                                                            :form form})))]
+                                                     (target-commands/run-command :eval-form-bulk forms))))}
+        ctx-menu-show-similar-fn-call-item {:text "Show function calls"
+                                            :on-click (fn []
+                                                        (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
+                                                              {:keys [form-id fn-ns fn-name]} (first (.getSelectedItems fns-list-selection))
+                                                              [observable-fn-calls-list] (obj-lookup flow-id (state-vars/thread-instrument-fn-calls-list-id thread-id))
+                                                              fn-call-traces (indexer/find-fn-calls indexer fn-ns fn-name form-id)]
+                                                          (doto observable-fn-calls-list
+                                                            .clear
+                                                            (.addAll (into-array Object fn-call-traces)))))}]
 
-    (.setOnMouseClicked instrument-list-view
+    (.setOnMouseClicked fns-list-view
                         (event-handler
                          [mev]
                          (when (= MouseButton/SECONDARY (.getButton mev))
-                           (.show ctx-menu
-                                  instrument-list-view
-                                  (.getScreenX mev)
-                                  (.getScreenY mev)))))
+                           (let [sel-cnt (count (.getSelectedItems fns-list-selection))
+                                 ctx-menu (if (= 1 sel-cnt)
+                                            (ui-utils/make-context-menu [ctx-menu-un-instrument-item ctx-menu-show-similar-fn-call-item])
+                                            (ui-utils/make-context-menu [ctx-menu-un-instrument-item]))]
+                             (.show ctx-menu
+                                    fns-list-view
+                                    (.getScreenX mev)
+                                    (.getScreenY mev))))))
 
-    (.setSelectionMode instrument-list-selection SelectionMode/MULTIPLE)
-    (store-obj flow-id (state-vars/thread-instrument-list-id thread-id) observable-bindings-list)
-    instrument-list-view))
+    (.setSelectionMode fns-list-selection SelectionMode/MULTIPLE)
+    (store-obj flow-id (state-vars/thread-instrument-list-id thread-id) observable-fns-list)
+    fns-list-view))
+
+(defn- create-fn-calls-list-pane [flow-id thread-id]
+  (let [observable-fn-calls-list (FXCollections/observableArrayList)
+        list-cell-factory (proxy [javafx.util.Callback] []
+                            (call [lv]
+                              (ui-utils/create-list-cell-factory
+                               (fn [list-cell {:keys [args-vec]}]
+                                 (let [[args-print-type-combo] (obj-lookup flow-id (state-vars/thread-fn-args-print-combo thread-id))
+                                       [print-args-type _] (.getSelectedItem (.getSelectionModel args-print-type-combo))
+                                       arg-selector (fn [n]
+                                                      (when (< n (count args-vec))
+                                                        (str "... " (format-value-short (nth args-vec n)) " ...")))
+                                       args-lbl (Label. (case print-args-type
+                                                          :all-args (format-value-short args-vec)
+                                                          :a0       (arg-selector 0)
+                                                          :a1       (arg-selector 1)
+                                                          :a2       (arg-selector 2)
+                                                          :a3       (arg-selector 3)
+                                                          :a4       (arg-selector 4)
+                                                          :a5       (arg-selector 5)
+                                                          :a6       (arg-selector 6)
+                                                          :a7       (arg-selector 7)
+                                                          :a8       (arg-selector 8)
+                                                          :a9       (arg-selector 9)))]
+                                   (.setGraphic ^Node list-cell args-lbl))))))
+        combo-cell-factory (proxy [javafx.util.Callback] []
+                             (call [lv]
+                               (ui-utils/create-list-cell-factory
+                                (fn [cell [_ text]]
+                                  (.setText cell text)))))
+        args-print-type-combo (doto (ComboBox.)
+                                (.setItems (doto (FXCollections/observableArrayList)
+                                             (.addAll (into-array Object [[:all-args "Print all args"]
+                                                                          [:a0       "Print only arg 0"]
+                                                                          [:a1       "Print only arg 1"]
+                                                                          [:a2       "Print only arg 2"]
+                                                                          [:a3       "Print only arg 3"]
+                                                                          [:a4       "Print only arg 4"]
+                                                                          [:a5       "Print only arg 5"]
+                                                                          [:a6       "Print only arg 6"]
+                                                                          [:a7       "Print only arg 7"]
+                                                                          [:a8       "Print only arg 8"]
+                                                                          [:a9       "Print only arg 9"]]))))
+                                (.setConverter (proxy [StringConverter] []
+                                                      (toString [[_ text]] text)))
+                                (.setCellFactory combo-cell-factory))
+        _ (.selectFirst (.getSelectionModel args-print-type-combo))
+        _ (store-obj flow-id (state-vars/thread-fn-args-print-combo thread-id) args-print-type-combo)
+        fn-call-list-view (doto (ListView. observable-fn-calls-list)
+                            (.setEditable false)
+                            (.setCellFactory list-cell-factory))
+        fn-call-list-selection (.getSelectionModel fn-call-list-view)
+        fn-call-list-pane (VBox. (into-array Node [args-print-type-combo fn-call-list-view]))]
+
+    (VBox/setVgrow fn-call-list-view Priority/ALWAYS)
+
+    (.setOnMouseClicked fn-call-list-view
+                        (event-handler
+                         [mev]
+                         (when (= MouseButton/SECONDARY (.getButton mev))
+                           (let [trace-idx (-> (.getSelectedItems fn-call-list-selection)
+                                               first
+                                               meta
+                                               :trace-idx)
+                                 ctx-menu (ui-utils/make-context-menu [{:text (format "Goto trace %d" trace-idx)
+                                                                        :on-click (fn []
+                                                                                    (jump-to-coord flow-id thread-id trace-idx))}])]
+                             (.show ctx-menu
+                                    fn-call-list-view
+                                    (.getScreenX mev)
+                                    (.getScreenY mev))))))
+
+    (.setSelectionMode fn-call-list-selection SelectionMode/SINGLE)
+    (store-obj flow-id (state-vars/thread-instrument-fn-calls-list-id thread-id) observable-fn-calls-list)
+    fn-call-list-pane))
+
+(defn- create-instrument-pane [flow-id thread-id]
+  (let [fns-list-pane (create-fns-list-pane flow-id thread-id)
+        fn-calls-list-pane (create-fn-calls-list-pane flow-id thread-id)]
+    (HBox/setHgrow fns-list-pane Priority/ALWAYS)
+    (HBox/setHgrow fn-calls-list-pane Priority/ALWAYS)
+    (HBox. (into-array Node [fns-list-pane fn-calls-list-pane]))))
 
 (defn- update-instrument-pane [flow-id thread-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
@@ -651,7 +746,7 @@
         callstack-tree-tab (doto (Tab. "Call tree")
                              (.setContent (create-call-stack-tree-pane flow-id thread-id))
                              (.setOnSelectionChanged (event-handler [_] (update-call-stack-tree-pane flow-id thread-id))))
-        instrument-tab (doto (Tab. "Instrument")
+        instrument-tab (doto (Tab. "Functions")
                              (.setContent (create-instrument-pane flow-id thread-id))
                              (.setOnSelectionChanged (event-handler [_] (update-instrument-pane flow-id thread-id))))]
 
