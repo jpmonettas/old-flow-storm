@@ -1,6 +1,6 @@
 (ns flow-storm.debugger.ui.flows
   (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box]]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [clojure.pprint :as pp]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
@@ -22,22 +22,13 @@
 
 (declare jump-to-coord)
 
-(def form-background-normal (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#eee")
-                                                                                      (CornerRadii. 0)
-                                                                                      (Insets. 0))])))
-
-(def form-background-highlighted (Background. (into-array BackgroundFill [(BackgroundFill. (Color/web "#ebecff")
-                                                                                      (CornerRadii. 0)
-                                                                                      (Insets. 0))])))
-
-(defn def-kind-color-style [kind]
-  (format "-fx-text-fill: %s;"
-          (case kind
-            :defmethod       "#9c0084"
-            :extend-protocol "#369658"
-            :extend-type     "#369658"
-            :defn            "#222"
-            "#222")))
+(defn def-kind-colored-label [text kind]
+  (case kind
+    :defmethod       (label text "defmethod")
+    :extend-protocol (label text "extend-protocol")
+    :extend-type     (label text "extend-type")
+    :defn            (label text "defn")
+    (label text "anonymous")))
 
 (defn- format-value-short [v]
   (let [max-len 80
@@ -97,7 +88,7 @@
     result-text-area))
 
 (defn create-result-tree-pane [flow-id thread-id]
-  (Label. "TREE")
+  (label "TREE")
   )
 
 (defn update-pprint-pane [flow-id thread-id pane-id val]
@@ -129,15 +120,14 @@
                        (call [lv]
                          (ui-utils/create-list-cell-factory
                           (fn [list-cell {:keys [form-def-kind fn-name fn-ns form-id dispatch-val cnt]}]
-                            (let [fn-lbl (doto (Label. (case form-def-kind
-                                                         :defmethod       (format "%s/%s %s" fn-ns fn-name dispatch-val)
-                                                         :extend-protocol (format "%s/%s" fn-ns fn-name)
-                                                         :extend-type     (format "%s/%s" fn-ns fn-name)
-                                                         :defn            (format "%s/%s" fn-ns fn-name)
-                                                         (format "F %s/%s" fn-ns fn-name)))
-                                           (.setPrefWidth 500)
-                                           (.setStyle (def-kind-color-style form-def-kind)))
-                                  cnt-lbl (doto (Label. (str cnt))
+                            (let [fn-lbl (doto (case form-def-kind
+                                                 :defmethod       (def-kind-colored-label (format "%s/%s %s" fn-ns fn-name dispatch-val) form-def-kind)
+                                                 :extend-protocol (def-kind-colored-label (format "%s/%s" fn-ns fn-name) form-def-kind)
+                                                 :extend-type     (def-kind-colored-label (format "%s/%s" fn-ns fn-name) form-def-kind)
+                                                 :defn            (def-kind-colored-label (format "%s/%s" fn-ns fn-name) form-def-kind)
+                                                 (def-kind-colored-label (format "F %s/%s" fn-ns fn-name) form-def-kind))
+                                           (.setPrefWidth 500))
+                                  cnt-lbl (doto (label (str cnt))
                                             (.setPrefWidth 100))
                                   hbox (h-box [fn-lbl cnt-lbl])]
                               (.setGraphic ^Node list-cell hbox))))))
@@ -202,18 +192,18 @@
                                        arg-selector (fn [n]
                                                       (when (< n (count args-vec))
                                                         (str "... " (format-value-short (nth args-vec n)) " ...")))
-                                       args-lbl (Label. (case print-args-type
-                                                          :all-args (format-value-short args-vec)
-                                                          :a0       (arg-selector 0)
-                                                          :a1       (arg-selector 1)
-                                                          :a2       (arg-selector 2)
-                                                          :a3       (arg-selector 3)
-                                                          :a4       (arg-selector 4)
-                                                          :a5       (arg-selector 5)
-                                                          :a6       (arg-selector 6)
-                                                          :a7       (arg-selector 7)
-                                                          :a8       (arg-selector 8)
-                                                          :a9       (arg-selector 9)))]
+                                       args-lbl (label (case print-args-type
+                                                         :all-args (format-value-short args-vec)
+                                                         :a0       (arg-selector 0)
+                                                         :a1       (arg-selector 1)
+                                                         :a2       (arg-selector 2)
+                                                         :a3       (arg-selector 3)
+                                                         :a4       (arg-selector 4)
+                                                         :a5       (arg-selector 5)
+                                                         :a6       (arg-selector 6)
+                                                         :a7       (arg-selector 7)
+                                                         :a8       (arg-selector 8)
+                                                         :a9       (arg-selector 9)))]
                                    (.setGraphic ^Node list-cell args-lbl))))))
         combo-cell-factory (proxy [javafx.util.Callback] []
                              (call [lv]
@@ -287,9 +277,9 @@
                        (call [lv]
                          (ui-utils/create-list-cell-factory
                           (fn [list-cell symb-val]
-                            (let [symb-lbl (doto (Label. (first symb-val))
+                            (let [symb-lbl (doto (label (first symb-val))
                                              (.setPrefWidth 100))
-                                  val-lbl (Label.  (format-value-short (second symb-val)))
+                                  val-lbl (label  (format-value-short (second symb-val)))
                                   hbox (h-box [symb-lbl val-lbl])]
                               (.setGraphic ^Node list-cell hbox))))))
         locals-list-view (doto (ListView. observable-bindings-list)
@@ -362,15 +352,12 @@
 
     (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
           {:keys [multimethod/dispatch-val form/def-kind]} (indexer/get-form indexer form-id)
-          ns-lbl (doto (Label. (str fn-ns "/"))
-                   (.setStyle "-fx-text-fill: #999;"))
-          fn-name-lbl (doto (Label. fn-name)
-                        (.setStyle (def-kind-color-style def-kind)))
-          args-lbl (doto (Label. (str " " (format-tree-fn-call-args args)))
-                     (.setStyle "-fx-text-fill: #777;"))
+          ns-lbl (label (str fn-ns "/") "fn-ns")
+          fn-name-lbl (def-kind-colored-label fn-name def-kind)
+          args-lbl (label (str " " (format-tree-fn-call-args args)) "fn-args")
           fn-call-box (if dispatch-val
-                        (h-box [(Label. "(") ns-lbl fn-name-lbl (Label. (str dispatch-val)) args-lbl (Label. ")")])
-                        (h-box [(Label. "(") ns-lbl fn-name-lbl args-lbl (Label. ")")]))
+                        (h-box [(label "(") ns-lbl fn-name-lbl (label (str dispatch-val)) args-lbl (label ")")])
+                        (h-box [(label "(") ns-lbl fn-name-lbl args-lbl (label ")")]))
           ctx-menu-options [{:text (format "Goto trace %d" call-trace-idx)
                              :on-click #(jump-to-coord flow-id thread-id call-trace-idx)}
                             {:text (format "Hide %s/%s from this tree" fn-ns fn-name)
@@ -403,7 +390,7 @@
         search-lvl-txt (doto (TextField. "2")
                          (.setPrefWidth 30)
                          (.setAlignment Pos/CENTER))
-        search-match-lbl (Label. "")
+        search-match-lbl (label "")
         search-btn (ui-utils/icon-button "mdi-magnify" "tree-search")
         _ (doto search-btn
               (.setOnAction (event-handler
@@ -439,8 +426,8 @@
                                ))))]
     (doto (h-box [search-match-lbl
                   search-txt
-                  (Label. "From Idx: ")   search-from-txt
-                  (Label. "*print-level* : ") search-lvl-txt
+                  (label "From Idx: ")   search-from-txt
+                  (label "*print-level* : ") search-lvl-txt
                   search-btn])
       (.setSpacing 3.0)
       (.setAlignment Pos/CENTER_RIGHT)
@@ -492,8 +479,8 @@
         tree-view-sel-model (.getSelectionModel tree-view)
         callstack-fn-args-pane   (create-pprint-pane flow-id thread-id "fn_args")
         callstack-fn-ret-pane (create-pprint-pane flow-id thread-id "fn_ret")
-        labeled-args-pane  (v-box [(Label. "Args:") callstack-fn-args-pane])
-        labeled-ret-pane (v-box [(Label. "Ret:") callstack-fn-ret-pane])
+        labeled-args-pane  (v-box [(label "Args:") callstack-fn-args-pane])
+        labeled-ret-pane (v-box [(label "Ret:") callstack-fn-ret-pane])
         args-ret-pane (doto (h-box [labeled-args-pane labeled-ret-pane])
                         (.setSpacing 5.0))]
     (HBox/setHgrow labeled-args-pane Priority/ALWAYS)
@@ -513,17 +500,16 @@
             args-ret-pane])))
 
 
-(defn- highlight-executing [^Text token-text]
-  (doto token-text
-    (.setFill (Color/web "#459e11"))))
+(defn- highlight-executing [token-text]
+  (ui-utils/rm-class token-text "interesting")
+  (ui-utils/add-class token-text "executing"))
 
-(defn- highlight-interesting [^Text token-text]
-  (doto token-text
-    (.setFill (Color/web "#de00c0"))))
+(defn- highlight-interesting [token-text]
+  (ui-utils/rm-class token-text "executing")
+  (ui-utils/add-class token-text "interesting"))
 
 (defn- arm-interesting [^Text token-text traces]
   (let [{:keys [flow-id thread-id]} (first traces)]
-    (.setStyle token-text "-fx-cursor: hand; -fx-font-weight: bold;")
 
     (if (> (count traces) 1)
       (let [ctx-menu-options (->> traces
@@ -548,7 +534,6 @@
         form (indexer/get-form indexer form-id)
         print-tokens (binding [pp/*print-right-margin* 80]
                        (form-pprinter/pprint-tokens (:form/form form)))
-        text-font (Font/font "monospaced" 13)
         [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
         tokens-texts (->> print-tokens
                           (map (fn [tok]
@@ -557,22 +542,18 @@
                                                :nl   "\n"
                                                :sp   " "
                                                (first tok)))
+                                       _ (ui-utils/add-class text "code-token")
                                        coord (when (vector? tok) (second tok))]
-                                   (doto text
-                                     (.setFill (Color/web "#0b0d2e"))
-                                     (.setFont text-font))
                                    (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
                                    text))))
-        ns-label (doto (Label. (format "ns: %s" (:form/ns form)))
+        ns-label (doto (label (format "ns: %s" (:form/ns form)))
                    (.setFont (Font. 10)))
 
         form-header (doto (h-box [ns-label])
                       (.setAlignment (Pos/TOP_RIGHT)))
         form-text-flow (TextFlow. (into-array Text tokens-texts))
 
-        form-pane (doto (v-box [form-header form-text-flow])
-                    (.setBackground form-background-normal)
-                    (.setStyle "-fx-padding: 10;"))
+        form-pane (v-box [form-header form-text-flow] "form-pane")
         ]
     (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
 
@@ -587,10 +568,9 @@
     (.setText lbl (str cnt))))
 
 (defn- un-highlight [^Text token-text]
-  (doto token-text
-    (.setFill (Color/BLACK))
-    (.setStyle "-fx-cursor: pointer;")
-    (.setOnMouseClicked (event-handler [_]))))
+  (ui-utils/rm-class token-text "interesting")
+  (ui-utils/rm-class token-text "executing")
+  (.setOnMouseClicked token-text (event-handler [_])))
 
 (defn highlight-form [flow-id thread-id form-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
@@ -626,13 +606,13 @@
 
 
     (ui-utils/center-node-in-scroll-pane thread-scroll-pane form-pane)
-    (.setBackground form-pane form-background-highlighted)))
+    (ui-utils/add-class form-pane "form-background-highlighted")))
 
 (defn- unhighlight-form [flow-id thread-id form-id]
   (let [[form-pane] (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))]
     (doto form-pane
-      (.setBackground form-background-normal)
-      (.setOnMouseClicked (event-handler [_])))))
+      (.setOnMouseClicked (event-handler [_])))
+    (ui-utils/rm-class form-pane "form-background-highlighted")))
 
 (defn- jump-to-coord [flow-id thread-id next-trace-idx]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
@@ -714,9 +694,9 @@
                                   (jump-to-coord flow-id
                                                  thread-id
                                                  (dec (state/current-trace-idx dbg-state flow-id thread-id))))))
-        curr-trace-lbl (Label. "0")
-        separator-lbl (Label. "/")
-        thread-trace-count-lbl (Label. "-")
+        curr-trace-lbl (label "0")
+        separator-lbl (label "/")
+        thread-trace-count-lbl (label "-")
         _ (store-obj flow-id (state-vars/thread-curr-trace-lbl-id thread-id) curr-trace-lbl)
         _ (store-obj flow-id (state-vars/thread-trace-count-lbl-id thread-id) thread-trace-count-lbl)
         next-btn (doto (ui-utils/icon-button "mdi-chevron-right")
@@ -730,14 +710,12 @@
                                          [_]
                                          (let [{:keys [flow/execution-expr]} (state/get-flow dbg-state flow-id)]
                                            (target-commands/run-command :re-run-flow flow-id execution-expr)))))
-        trace-pos-box (doto (h-box [curr-trace-lbl separator-lbl thread-trace-count-lbl])
-                        (.setSpacing 2.0)
-                        (.setStyle "-fx-alignment: center;"))
+        trace-pos-box (doto (h-box [curr-trace-lbl separator-lbl thread-trace-count-lbl] "trace-position-box")
+                        (.setSpacing 2.0))
         controls-box (doto (h-box [prev-btn next-btn re-run-flow-btn])
                        (.setSpacing 2.0))]
 
-    (doto (h-box [controls-box trace-pos-box])
-      (.setStyle "-fx-background-color: #ddd; -fx-padding: 10;")
+    (doto (h-box [controls-box trace-pos-box] "thread-controls-pane")
       (.setSpacing 2.0))))
 
 (defn- create-thread-pane [flow-id thread-id]
@@ -782,7 +760,7 @@
 
 (defn main-pane []
 
-  (let [tab-pane (doto (TabPane.) ;;TODO: make flows closable
+  (let [tab-pane (doto (TabPane.)
                    (.setTabClosingPolicy TabPane$TabClosingPolicy/ALL_TABS))]
     (store-obj "flows_tabs_pane" tab-pane)
     tab-pane))

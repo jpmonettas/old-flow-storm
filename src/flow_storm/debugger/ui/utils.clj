@@ -1,5 +1,6 @@
 (ns flow-storm.debugger.ui.utils
-  (:import [javafx.scene.control Button ContextMenu MenuItem ScrollPane ListCell Tab]
+  (:import [javafx.scene.control Button CheckBox ContextMenu ComboBox Label ListView ListCell MenuItem ScrollPane SelectionMode SelectionModel
+            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
            [javafx.scene.layout BorderPane GridPane HBox VBox]
            [javafx.scene Node]
            [org.kordamp.ikonli.javafx FontIcon]))
@@ -84,6 +85,12 @@
     (.add (.getStyleClass t) class)
     t))
 
+(defn add-class [node class]
+  (.add (.getStyleClass node) class))
+
+(defn rm-class [node class]
+  (.remove (.getStyleClass node) class))
+
 (defn v-box
   ([childs] (v-box childs nil))
   ([childs class]
@@ -99,3 +106,11 @@
      (when class
        (.add (.getStyleClass box) class))
      box)))
+
+(defn label
+  ([text] (label text nil))
+  ([text class]
+   (let [lbl (Label. text)]
+     (when class
+       (add-class lbl class))
+     lbl)))
