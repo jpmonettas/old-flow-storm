@@ -3,7 +3,6 @@
             [flow-storm.debugger.trace-indexer.mutable.callstack-tree :as callstack-tree]
             [flow-storm.debugger.ui.state-vars :as ui-vars]
             [clojure.string :as str]
-            [clojure.spec.alpha :as s]
             [flow-storm.utils :as utils])
   (:import [java.util ArrayList HashMap]))
 
@@ -106,42 +105,41 @@
 
   (search-next-fn-call-trace [this search-str from-idx print-level on-result-cb on-progress]
     (locking this
-      (let [indexer-obj this]
-       (let [search-thread (Thread.
-                            (fn []
-                              (binding [clojure.core/*print-level* print-level]
-                                (let [total-traces (count traces)
-                                      match-stack (loop [i 0
-                                                         stack ()]
-                                                    (when (and (< i total-traces)
-                                                               (not (.isInterrupted (Thread/currentThread))))
+      (let [search-thread (Thread.
+                           (fn []
+                             (binding [clojure.core/*print-level* print-level]
+                               (let [total-traces (count traces)
+                                     match-stack (loop [i 0
+                                                        stack ()]
+                                                   (when (and (< i total-traces)
+                                                              (not (.isInterrupted (Thread/currentThread))))
 
 
-                                                      (when (zero? (mod i 10000))
-                                                        (on-progress (* 100 (/ i total-traces))))
+                                                     (when (zero? (mod i 10000))
+                                                       (on-progress (* 100 (/ i total-traces))))
 
-                                                      (let [{:keys [fn-name args-vec] :as t} (.get traces i)]
-                                                        (if (utils/fn-call-trace? t)
+                                                     (let [{:keys [fn-name args-vec] :as t} (.get traces i)]
+                                                       (if (utils/fn-call-trace? t)
 
 
-                                                          (if (and (> i from-idx)
-                                                                   (or (str/includes? fn-name search-str)
-                                                                       (str/includes? (pr-str args-vec) search-str)))
+                                                         (if (and (> i from-idx)
+                                                                  (or (str/includes? fn-name search-str)
+                                                                      (str/includes? (pr-str args-vec) search-str)))
 
-                                                            ;; if matches
-                                                            (conj stack i)
+                                                           ;; if matches
+                                                           (conj stack i)
 
-                                                            ;; else
-                                                            (recur (inc i) (conj stack i)))
-                                                          ;; it is a exec-trace, check if it is returning
-                                                          (if (:outer-form? t)
-                                                            (recur (inc i) (pop stack))
-                                                            (recur (inc i) stack))))))]
-                                  (when (.isInterrupted (Thread/currentThread))
-                                    (tap> "Search stopped"))
-                                  (on-result-cb match-stack)))))]
-         (reset! ui-vars/long-running-task-thread search-thread)
-         (.start search-thread))))))
+                                                           ;; else
+                                                           (recur (inc i) (conj stack i)))
+                                                         ;; it is a exec-trace, check if it is returning
+                                                         (if (:outer-form? t)
+                                                           (recur (inc i) (pop stack))
+                                                           (recur (inc i) stack))))))]
+                                 (when (.isInterrupted (Thread/currentThread))
+                                   (tap> "Search stopped"))
+                                 (on-result-cb match-stack)))))]
+        (reset! ui-vars/long-running-task-thread search-thread)
+        (.start search-thread)))))
 
 (defn make-indexer []
   (->MutableTraceIndexer (ArrayList.)

@@ -1,7 +1,6 @@
 (ns flow-storm.debugger.ui.utils
-  (:import [javafx.scene.control Button CheckBox ContextMenu ComboBox Label ListView ListCell MenuItem ScrollPane SelectionMode SelectionModel
-            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
-           [javafx.scene.layout BorderPane GridPane HBox VBox]
+  (:import [javafx.scene.control Button ContextMenu Label ListCell MenuItem ScrollPane Tab]
+           [javafx.scene.layout HBox VBox]
            [javafx.scene Node]
            [org.kordamp.ikonli.javafx FontIcon]))
 
@@ -36,7 +35,7 @@
 (defn event-handler*
   [f]
   (reify javafx.event.EventHandler
-    (handle [this e] (f e))))
+    (handle [_ e] (f e))))
 
 (defmacro event-handler [arg & body]
   `(event-handler* (fn ~arg ~@body)))

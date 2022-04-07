@@ -1,16 +1,14 @@
 (ns flow-storm.tracer
-  (:require [editscript.core :as edit.core]
-            [editscript.edit :as edit.edit]
-            [cognitect.transit :as transit]
-            [jsonista.core :as json]
-            [flow-storm.binary-serializer :as bin-serializer])
-  (:import [java.net URI]
-           [org.java_websocket.client WebSocketClient]
-           [org.java_websocket.handshake ServerHandshake]
-           [java.util.concurrent ArrayBlockingQueue]
-           [java.io FileOutputStream ByteArrayOutputStream DataOutputStream]))
+  (:require [flow-storm.binary-serializer :as bin-serializer]
+            #?(:clj [jsonista.core :as json]))
+  #?(:clj (:import [java.util.concurrent ArrayBlockingQueue]
+                   [org.java_websocket.client WebSocketClient]
+                   [java.net URI]
+                   [org.java_websocket.handshake ServerHandshake]
+                   [java.io FileOutputStream DataOutputStream])))
 
-(def ^ArrayBlockingQueue trace-queue nil)
+(def trace-queue nil)
+
 (defonce ^Thread send-thread nil)
 
 ;; (def ^:dynamic *flow-id* nil)
@@ -51,11 +49,15 @@
                                    :timestamp (get-timestamp)})]
     (.put trace-queue trace)))
 
+(defn get-current-thread-id []
+  #?(:clj (.getId (Thread/currentThread))
+     :cljs 0))
+
 (defn trace-form-init-trace
   "Instrumentation function. Sends the `:init-trace` trace"
-  [{:keys [form-id args-vec ns def-kind dispatch-val] :as t} form]
+  [{:keys [form-id ns def-kind dispatch-val]} form]
   (let [{:keys [flow-id init-traced-forms]} *runtime-ctx*        
-        thread-id (.getId (Thread/currentThread))]
+        thread-id (get-current-thread-id)]
     (when-not (contains? @init-traced-forms [flow-id thread-id form-id])
       (let [trace (map->FormInitTrace {:flow-id flow-id
                                        :form-id form-id
@@ -70,12 +72,12 @@
 
 (defn trace-expr-exec-trace
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
-  [result err {:keys [coor outer-form? form-id] :as t}]
+  [result _ {:keys [coor outer-form? form-id]}]
   (let [{:keys [flow-id]} *runtime-ctx*
         trace (map->ExecTrace {:flow-id flow-id
                                :form-id form-id
                                :coor coor
-                               :thread-id (.getId (Thread/currentThread))
+                               :thread-id (get-current-thread-id)
                                :timestamp (get-timestamp)
                                :result result
                                :outer-form? outer-form?})]
@@ -88,7 +90,7 @@
                                  :form-id form-id
                                  :fn-name fn-name
                                  :fn-ns ns
-                                 :thread-id (.getId (Thread/currentThread))
+                                 :thread-id (get-current-thread-id)
                                  :args-vec args-vec
                                  :timestamp (get-timestamp)})]
     (.put trace-queue trace)))
@@ -100,7 +102,7 @@
         trace (map->BindTrace {:flow-id flow-id
                                :form-id form-id
                                :coor (or coor [])
-                               :thread-id (.getId (Thread/currentThread))
+                               :thread-id (get-current-thread-id)
                                :timestamp (get-timestamp)
                                :symbol (name symb)
                                :value val})]
@@ -162,6 +164,7 @@
 ;;                   (trace-tap tap-id tap-name v))))))
 #?(:clj
    (defn build-ws-sender [{:keys [host port]}]
+     host port
      (let [wsc (proxy
                    [WebSocketClient]
                    [(URI. "ws://localhost:7722/ws")]
@@ -190,19 +193,24 @@
                 (bin-serializer/serialize-trace file-dos trace))
      :file-output-stream file-dos}))
 
-(defn log-stats [cnt qsize last-report-cnt last-report-t]  
-  #?(:clj
+#?(:clj
+   (defn log-stats [cnt qsize last-report-cnt last-report-t]  
      (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
                    cnt
                    qsize
                    (quot (- cnt last-report-cnt)
                          (/ (double (- (System/nanoTime) last-report-t))
-                            1000000000.0))))))
+                            1000000000.0)))))
+   
+   :cljs
+   (defn log-stats [_ _ _ _]  
+     ))
+
 #?(:clj
    (defn connect
      "Connects to the flow-storm debugger. `"
      ([] (connect nil))
-     ([{:keys [tap-name send-fn]}]
+     ([{:keys [send-fn]}]
 
       ;; Stop the previous running `send-thread` if we have one
       ;; since we could be trying to reconnect
@@ -233,8 +241,8 @@
                                    (swap! *consumer-stats update :cnt inc))
                                  
                                  (send-fn trace))
-                               (catch java.lang.InterruptedException ie nil)
-                               (catch java.lang.IllegalMonitorStateException imse nil)
+                               (catch java.lang.InterruptedException _ nil)
+                               (catch java.lang.IllegalMonitorStateException _ nil)
                                (catch Exception e
                                  (tap> "SendThread consumer exception")
                                  (tap> e))))

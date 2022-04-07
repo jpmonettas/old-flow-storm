@@ -3,16 +3,15 @@
             [flow-storm.debugger.form-pprinter :as form-pprinter]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [flow-storm.debugger.ui.flows.components :as flow-cmp]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler v-box h-box label]]
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.target-commands :as target-commands]
             [flow-storm.utils :as utils])
-  (:import [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
-            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
+  (:import [javafx.scene.control Label ListView ScrollPane Tab TabPane TabPane$TabClosingPolicy SplitPane]
            [javafx.collections FXCollections ObservableList]
            [javafx.scene Node]
-           [javafx.geometry Insets Side Orientation Pos]
+           [javafx.geometry Orientation Pos]
            [javafx.scene.text TextFlow Text Font]
            [javafx.scene.input MouseEvent MouseButton]))
 
@@ -202,7 +201,7 @@
                   (highlight-interesting text))))))
 
         ;; "unhighlight" prev executing tokens
-        (when (and (utils/exec-trace? curr-trace))
+        (when (utils/exec-trace? curr-trace)
           (let [curr-token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id
                                                                             (:form-id curr-trace)
                                                                             (:coor curr-trace)))]

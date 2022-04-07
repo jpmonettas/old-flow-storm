@@ -2,11 +2,7 @@
   (:require [flow-storm.instrument.forms :as inst-forms]
             [flow-storm.instrument.namespaces :as inst-ns]
             [flow-storm.tracer :as tracer]
-            [clojure.pprint :as pp]
-            [cljs.main :as cljs-main]
-            [clojure.repl :as clj.repl]
-            [cljs.repl :as cljs.repl]
-            [clojure.instant :as inst]))
+            [clojure.repl :as clj.repl]))
 
 ;; This functions are commands suppoesed to be called
 ;; remotely once the remote debugger is implemented.

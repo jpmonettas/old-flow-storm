@@ -3,25 +3,11 @@
             [flow-storm.debugger.ui.flows.call-tree :as flow-tree]
             [flow-storm.debugger.ui.flows.functions :as flow-fns]
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
-            [flow-storm.debugger.trace-indexer.protos :as indexer]
-            [clojure.pprint :as pp]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-now v-box h-box label]]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
-            [flow-storm.debugger.form-pprinter :as form-pprinter]
-            [clojure.string :as str]
-            [flow-storm.utils :as utils]
             [flow-storm.debugger.target-commands :as target-commands])
-  (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane Priority Pane HBox VBox]
-           [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
-            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
-           [javafx.scene.text TextFlow Text Font]
-           [ javafx.beans.value ChangeListener]
-           [javafx.scene Node]
-           [javafx.scene.paint Color]
-           [javafx.util StringConverter]
-           [javafx.geometry Insets Side Orientation Pos]
-           [javafx.collections FXCollections ObservableList]
-           [javafx.scene.input MouseEvent MouseButton]))
+  (:import [javafx.scene.control Tab TabPane TabPane$TabClosingPolicy]
+           [javafx.geometry Side]))
 
 (defn remove-flow [flow-id]
   (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")

@@ -43,7 +43,7 @@
                             (zip/edit (fn [node]
                                         (update node :bindings assoc symbol value))))))))
 
-(defn process-exec-trace [callstack-tree trace-idx {:keys [result outer-form?] :as trace}]
+(defn process-exec-trace [callstack-tree trace-idx {:keys [result outer-form?]}]
   (let [callstack-tree-1 (update callstack-tree :zipper
                                  (fn [z]
                                    (swap! (-> z zip/node :frame-mut-data-ref)

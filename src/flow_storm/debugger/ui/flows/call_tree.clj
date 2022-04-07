@@ -4,13 +4,12 @@
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]])
-  (:import [javafx.collections FXCollections ObservableList]
-           [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
-            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler v-box h-box label]])
+  (:import [javafx.collections ObservableList]
+           [javafx.scene.control SelectionModel TreeCell TextField  Tooltip TreeView TreeItem]
            [javafx.scene.input MouseEvent MouseButton]
            [ javafx.beans.value ChangeListener]
-           [javafx.geometry Insets Side Orientation Pos]
+           [javafx.geometry Insets Pos]
            [javafx.scene.layout HBox Priority VBox]))
 
 (defn update-call-stack-tree-pane [flow-id thread-id]
@@ -101,32 +100,32 @@
                              (tap> "Searching")
                              (.setDisable search-btn true)
                              (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
-                             (let [next-match-path (indexer/search-next-fn-call-trace
-                                                    indexer
-                                                    (.getText search-txt)
-                                                    (Integer/parseInt (.getText search-from-txt))
-                                                    (Integer/parseInt (.getText search-lvl-txt))
-                                                    (fn [next-match-path]
-                                                      (if next-match-path
-                                                        (let [[match-trace-idx] next-match-path]
-                                                          (tap> (format "Next match at %s" next-match-path))
-                                                          (state/callstack-tree-select-path dbg-state
-                                                                                            flow-id
-                                                                                            thread-id
-                                                                                            next-match-path)
-                                                          (ui-utils/run-later
-                                                           (update-call-stack-tree-pane flow-id thread-id)
-                                                           (select-call-stack-tree-node flow-id thread-id match-trace-idx)
-                                                           (.setText search-match-lbl (format "Match idx %d" match-trace-idx))
-                                                           (.setText search-from-txt (str match-trace-idx))))
-                                                        (do
-                                                          (ui-utils/run-later (.setText search-match-lbl ""))
-                                                          (tap> "No match found")))
-                                                      (ui-utils/run-later (.setDisable search-btn false)))
-                                                    (fn [progress-perc]
-                                                      (ui-utils/run-later
-                                                       (.setText search-match-lbl (format "%.2f %%" (double progress-perc))))))]
-                               ))))]
+                             (indexer/search-next-fn-call-trace
+                              indexer
+                              (.getText search-txt)
+                              (Integer/parseInt (.getText search-from-txt))
+                              (Integer/parseInt (.getText search-lvl-txt))
+                              (fn [next-match-path]
+                                (if next-match-path
+                                  (let [[match-trace-idx] next-match-path]
+                                    (tap> (format "Next match at %s" next-match-path))
+                                    (state/callstack-tree-select-path dbg-state
+                                                                      flow-id
+                                                                      thread-id
+                                                                      next-match-path)
+                                    (ui-utils/run-later
+                                     (update-call-stack-tree-pane flow-id thread-id)
+                                     (select-call-stack-tree-node flow-id thread-id match-trace-idx)
+                                     (.setText search-match-lbl (format "Match idx %d" match-trace-idx))
+                                     (.setText search-from-txt (str match-trace-idx))))
+                                  (do
+                                    (ui-utils/run-later (.setText search-match-lbl ""))
+                                    (tap> "No match found")))
+                                (ui-utils/run-later (.setDisable search-btn false)))
+                              (fn [progress-perc]
+                                (ui-utils/run-later
+                                 (.setText search-match-lbl (format "%.2f %%" (double progress-perc))))))
+                             )))]
     (doto (h-box [search-match-lbl
                   search-txt
                   (label "From Idx: ")   search-from-txt

@@ -69,7 +69,7 @@
                     (-> form
                         (inst-forms/instrument-all ctx)
                         (inst-forms/maybe-unwrap-outer-form-instrumentation ctx))
-                    (catch Exception e
+                    (catch Exception _
                       (throw (ex-info "Error instrumenting form" {:type :unknown-error}))))]
 
     (try

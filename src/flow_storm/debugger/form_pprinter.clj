@@ -14,13 +14,12 @@
       (or (seq? form) (vector? form) (set? form))
       (let [[db de] (seq-delims form)]
         (-> [[db curr-coord]]
-            (into (mapcat (fn [i f] (form-tokens f)) (range) form))
+            (into (mapcat (fn [f] (form-tokens f)) form))
             (into [[de curr-coord]])))
 
       (map? form)
       (let [keys-vals (mapcat identity form)
-            keys-vals-tokens (mapcat (fn [i f] (form-tokens f))
-                                     (range)
+            keys-vals-tokens (mapcat (fn [f] (form-tokens f))
                                      keys-vals)]
         (-> [["{" curr-coord]]
             (into keys-vals-tokens)
@@ -140,8 +139,8 @@
 
   (binding [pp/*print-right-margin* 80
               pp/*print-pprint-dispatch* pp/code-dispatch]
-      (= (-> test-form
-             (pprint-tokens)
-             debug-print-tokens)))
+      (-> test-form
+          (pprint-tokens)
+          debug-print-tokens))
 
   )

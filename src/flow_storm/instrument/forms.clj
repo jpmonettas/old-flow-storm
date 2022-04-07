@@ -34,7 +34,7 @@
   [obj & metamaps]
   (try
     (apply vary-meta obj merge metamaps)
-    (catch Exception e obj)))
+    (catch Exception _ obj)))
 
 (defn strip-meta
   "Strip meta from form.
@@ -71,7 +71,7 @@
                               ;; throws if called on `defrecords`.
                               (try (let [r (macroexpand+ macroexpand-1-fn form)]
                                      r)
-                                   (catch ClassNotFoundException e form))
+                                   (catch ClassNotFoundException _ form))
                               form))]
     (if md
       ;; Macroexpand the metadata too, because sometimes metadata
@@ -127,7 +127,7 @@
   This is like `defn-`, except the metadata of the return value is
   merged with that of the first input argument."
   [& args]
-  (let [[d name f] (macroexpand `(defn- ~@args))]
+  (let [[_ name f] (macroexpand `(defn- ~@args))]
     `(def ~name
        (fn [& args#] (merge-meta (apply ~f args#) (meta (first args#)))))))
 
@@ -160,7 +160,7 @@
 
 (defn- bind-tracer
   "Generates a form to trace a symbol value at coor."
-  [symb coor {:keys [on-bind-fn form-id disable] :as ctx}]
+  [symb coor {:keys [on-bind-fn disable] :as ctx}]
   (when-not (or (disable :binding)
                 (uninteresting-symb? symb))
     `(~on-bind-fn
@@ -235,22 +235,21 @@
                  '#{loop* let* letfn*} (cons (->> (first args)
                                                   (partition 2)
                                                   (mapcat (fn [[symb x]]
-                                                            (let []
-                                                              (if (or (uninteresting-symb? symb)
-                                                                      (#{'loop*} name))
-                                                                [symb (instrument x ctx)]
+                                                            (if (or (uninteresting-symb? symb)
+                                                                    (#{'loop*} name))
+                                                              [symb (instrument x ctx)]
 
-                                                                ;; if it is not a loop add more _ bindings
-                                                                ;; that just trace the bound values
-                                                                ;; like [a (+ 1 2)] will became
-                                                                ;; [a (+ 1 2)
-                                                                ;;  _ (bound-trace a ...)]
-                                                                (cond-> [symb (instrument x ctx)]
-                                                                  ;; doesn't make sense to trace the bind if its a letfn* since
-                                                                  ;; they are just fns
-                                                                  (and (not (disable :binding))
-                                                                       (not= 'letfn* name))
-                                                                  (into ['_ (bind-tracer symb (-> form meta ::coor) ctx)]))))))
+                                                              ;; if it is not a loop add more _ bindings
+                                                              ;; that just trace the bound values
+                                                              ;; like [a (+ 1 2)] will became
+                                                              ;; [a (+ 1 2)
+                                                              ;;  _ (bound-trace a ...)]
+                                                              (cond-> [symb (instrument x ctx)]
+                                                                ;; doesn't make sense to trace the bind if its a letfn* since
+                                                                ;; they are just fns
+                                                                (and (not (disable :binding))
+                                                                     (not= 'letfn* name))
+                                                                (into ['_ (bind-tracer symb (-> form meta ::coor) ctx)])))))
                                                   vec)
                                              (instrument-coll (rest args) ctx))
                  '#{reify* deftype*} (map #(if (seq? %)
@@ -260,7 +259,7 @@
                                              %)
                                           args)
                  ;; `fn*` has several possible syntaxes.
-                 '#{fn*} (let [[a1 & [a2 & ar :as a1r]] args
+                 '#{fn*} (let [[a1 & a1r] args
                                {:keys [defn-def]} ctx
                                ;; if current ctx contains a defn-def, it is because we are a defn fn*, so use it to trace the fn-call
                                ;; then remove it from ctx so fn* declared down the road don't think they are defn
@@ -349,7 +348,7 @@
   [[name & args :as fncall] ctx]
   (cons name (instrument-coll args ctx)))
 
-(defn- instrument-form [form coor {:keys [on-expr-exec-fn form-id outer-form? compiler disable] :as ctx}]
+(defn- instrument-form [form coor {:keys [on-expr-exec-fn form-id outer-form? disable]}]
   ;; only disable :fn-call traces if it is not the outer form, we still want to
   ;; trace it since its the function return trace
   (if (and (disable :expr) (not outer-form?))
@@ -363,9 +362,8 @@
 (defn- maybe-instrument
   "If the form has been tagged with ::coor on its meta, then instrument it
   with trace-and-return"
-  ([form {:keys [form-id] :as ctx}]
-   (let [{coor ::coor
-          [_ orig] ::original-form} (meta form)]
+  ([form ctx]
+   (let [{coor ::coor} (meta form)]
      (cond
        coor
        (instrument-form form coor ctx)
@@ -374,8 +372,7 @@
        ;; destroyed by a macro. Try guessing the extras by looking at
        ;; the first element. This fixes `->`, for instance.
        (seq? form)
-       (let [{coor ::coor
-              [_ orig] ::original-form} (meta (first form))
+       (let [{coor ::coor} (meta (first form))
              ;; coor (if (= (last extras) 0)
              ;;          (pop extras)
              ;;          extras)
@@ -438,16 +435,16 @@
          (and (seq? x)
               (= (first x) 'fn*)))))
 
-(defn- expanded-clojure-core-extend-form? [[symb] ctx]
+(defn- expanded-clojure-core-extend-form? [[symb] _]
   (= symb 'clojure.core/extend))
 
-(defn- expanded-extend-protocol-form? [form ctx]
+(defn- expanded-extend-protocol-form? [form _]
   (and (seq? form)
        (= 'do (first form))
        (seq? (second form))
        (= 'clojure.core/extend (-> form second first))))
 
-(defn expanded-form-type [form {:keys [compiler] :as ctx}]
+(defn expanded-form-type [form ctx]
   (when (seq? form)
     (cond
 
@@ -463,7 +460,7 @@
 )))
 
 
-(defn maybe-unwrap-outer-form-instrumentation [inst-form ctx]
+(defn maybe-unwrap-outer-form-instrumentation [inst-form _]
   (if (and (seq? inst-form)
            (= 'flow-storm.tracer/trace-expr-exec-trace (first inst-form)))
 
@@ -535,7 +532,7 @@
 
                 ;; all extend-protocols forms will pass thru here also, since they are the same
                 ;; inside the `do`, so keep the definicion :kind
-                (and (expanded-clojure-core-extend-form? form ctx))
+                (expanded-clojure-core-extend-form? form ctx)
                 (assoc ctx
                        :defn-def {:orig-form (::original-form (meta form))
                                   :kind (or (-> ctx :defn-def :kind) :extend-type)})
@@ -603,7 +600,7 @@
                                 (into {} (walk-indexed-map form))
                                 (try
                                   (into (sorted-map) (walk-indexed-map (into (sorted-map) form)))
-                                  (catch Exception e
+                                  (catch Exception _
                                     form)))
                   ;; Order of sets is unpredictable, unfortunately.
                   (set? form)  form
@@ -656,7 +653,7 @@
 
 (defn instrument-outer-form
   "Add some special instrumentation that is needed only on the outer form."
-  [{:keys [orig-form args-vec fn-name form-ns form-id on-flow-start-fn] :as ctx} forms preamble]
+  [{:keys [orig-form form-ns on-flow-start-fn] :as ctx} forms preamble]
   `(let [curr-ctx# flow-storm.tracer/*runtime-ctx*]
      (binding [flow-storm.tracer/*runtime-ctx* (or curr-ctx# (flow-storm.tracer/empty-runtime-ctx))]
 

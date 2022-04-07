@@ -1,13 +1,12 @@
 (ns flow-storm.debugger.ui.main
-  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box v-box]]
+  (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box]]
             [flow-storm.debugger.ui.flows.screen :as flows-screen]
-            [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
-            [flow-storm.debugger.ui.state-vars :as ui-vars]
+            [flow-storm.debugger.ui.state-vars :as ui-vars :refer [main-pane stage scene obj-lookup]]
             [clojure.java.io :as io])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
-           [javafx.scene.layout BorderPane GridPane HBox Pane VBox]
-           [javafx.scene.control Alert Alert$AlertType Button ButtonType ComboBox ContextMenu Dialog Label MenuItem TabPane TabPane$TabClosingPolicy Tab TableColumn TableView TextArea TextField]
+           [javafx.scene.layout BorderPane]
+           [javafx.scene.control Label TabPane TabPane$TabClosingPolicy Tab]
            [javafx.geometry Side]
            [javafx.application Platform]))
 

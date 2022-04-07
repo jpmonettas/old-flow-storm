@@ -1,7 +1,7 @@
 (ns flow-storm.debugger.specs
-  (:require [clojure.spec.alpha :as s]
+  #_(:require [clojure.spec.alpha :as s]
             [flow-storm.tracer])
-  (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
+  #_(:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
 
 ;; (s/def ::timestamp number?)
 ;; (s/def :flow/id number?)

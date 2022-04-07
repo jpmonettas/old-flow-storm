@@ -1,7 +1,6 @@
 (ns flow-storm.debugger.trace-indexer.immutable.impl
   (:require [flow-storm.debugger.trace-indexer.protos :refer [TraceIndex]]
-            [flow-storm.debugger.trace-indexer.immutable.callstack-tree :as callstack-tree]
-            [clojure.spec.alpha :as s]))
+            [flow-storm.debugger.trace-indexer.immutable.callstack-tree :as callstack-tree]))
 
 
 (defrecord ImmutableTraceIndexer [*state]
@@ -21,7 +20,7 @@
   (get-form [_ form-id]
     (get (:forms @*state) form-id))
 
-  (add-fn-call-trace [this trace]
+  (add-fn-call-trace [_ trace]
     (let [next-idx (count (:traces @*state))]
       (swap! *state
              (fn [state]
@@ -32,7 +31,7 @@
                                                (callstack-tree/process-fn-call-trace cs-tree next-idx trace))))
                    (update :traces conj trace))))))
 
-  (add-exec-trace [this {:keys [form-id]:as trace}]
+  (add-exec-trace [_ {:keys [form-id]:as trace}]
     (let [next-idx (count (:traces @*state))]
       (swap! *state
              (fn [state]
@@ -41,7 +40,7 @@
                    (update :traces conj trace)
                    (update-in [:forms-hot-traces form-id] (fnil conj []) (with-meta trace {:trace-idx next-idx})))))))
 
-  (add-bind-trace [this trace]
+  (add-bind-trace [_ trace]
     (swap! *state
            (fn [state]
              (-> state
@@ -50,7 +49,7 @@
   (get-trace [_ idx]
     (get (:traces @*state) idx))
 
-  (bindings-for-trace [this trace-idx]
+  (bindings-for-trace [_ trace-idx]
     (-> (callstack-tree/find-frame (:callstack-tree @*state) trace-idx)
         :bindings))
 
@@ -65,7 +64,7 @@
   (callstack-tree-root [_]
     (callstack-tree/callstack-tree-root (:callstack-tree @*state)))
 
-  (callstack-node-frame [this node]
+  (callstack-node-frame [_ node]
     (select-keys node [:fn-name :fn-ns :call-trace-idx :args :timestamp :form-id :ret]))
 
   (callstack-tree-childs [_ node]

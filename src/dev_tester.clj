@@ -41,4 +41,5 @@
         c (+ a b 7)]
     (-> (reduce + (map do-it xs))
        add
-       sub)))
+       sub
+       (+ c))))

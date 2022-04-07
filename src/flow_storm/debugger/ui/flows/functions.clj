@@ -1,18 +1,16 @@
 (ns flow-storm.debugger.ui.flows.functions
-  (:require [flow-storm.debugger.ui.flows.code :as flow-code]
-            [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
+  (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler v-box h-box label]]
             [flow-storm.debugger.ui.flows.components :as flow-cmp]
             [flow-storm.debugger.target-commands :as target-commands]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [flow-storm.debugger.ui.flows.code :as flows-code])
-  (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane Priority Pane HBox VBox]
+  (:import [javafx.scene.layout Priority HBox VBox]
            [javafx.collections FXCollections ObservableList]
            [javafx.scene Node]
-           [javafx.scene.control Button CheckBox ComboBox Label ListView ListCell ScrollPane SelectionMode SelectionModel
-            TreeCell TextArea TextField Tab TabPane TabPane$TabClosingPolicy Tooltip TreeView TreeItem  SplitPane]
-           [javafx.scene.input MouseEvent MouseButton]
+           [javafx.scene.control ComboBox ListView SelectionMode]
+           [javafx.scene.input MouseButton]
            [javafx.util StringConverter]))
 
 (defn- create-fns-list-pane [flow-id thread-id]
@@ -20,7 +18,7 @@
         cell-factory (proxy [javafx.util.Callback] []
                        (call [lv]
                          (ui-utils/create-list-cell-factory
-                          (fn [list-cell {:keys [form-def-kind fn-name fn-ns form-id dispatch-val cnt]}]
+                          (fn [list-cell {:keys [form-def-kind fn-name fn-ns dispatch-val cnt]}]
                             (let [fn-lbl (doto (case form-def-kind
                                                  :defmethod       (flow-cmp/def-kind-colored-label (format "%s/%s %s" fn-ns fn-name dispatch-val) form-def-kind)
                                                  :extend-protocol (flow-cmp/def-kind-colored-label (format "%s/%s" fn-ns fn-name) form-def-kind)
@@ -147,7 +145,7 @@
                                                :trace-idx)
                                  ctx-menu (ui-utils/make-context-menu [{:text (format "Goto trace %d" trace-idx)
                                                                         :on-click (fn []
-                                                                                    (flow-code/jump-to-coord flow-id thread-id trace-idx))}])]
+                                                                                    (flows-code/jump-to-coord flow-id thread-id trace-idx))}])]
                              (.show ctx-menu
                                     fn-call-list-view
                                     (.getScreenX mev)
@@ -165,8 +163,7 @@
     (h-box [fns-list-pane fn-calls-list-pane])))
 
 (defn update-functions-pane [flow-id thread-id]
-  (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
-        fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
+  (let [fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
                            (sort-by :cnt >))
         [^ObservableList observable-bindings-list] (obj-lookup flow-id (ui-vars/thread-fns-list-id thread-id))]
     (.clear observable-bindings-list)

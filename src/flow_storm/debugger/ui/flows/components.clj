@@ -1,6 +1,6 @@
 (ns flow-storm.debugger.ui.flows.components
   (:require [clojure.pprint :as pp]
-            [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
+            [flow-storm.debugger.ui.utils :as ui-utils :refer [label]]
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars])
   (:import [javafx.scene.control TextArea]))
 
@@ -27,7 +27,7 @@
     (store-obj flow-id (ui-vars/thread-pprint-text-area-id thread-id pane-id) result-text-area)
     result-text-area))
 
-(defn create-result-tree-pane [flow-id thread-id]
+(defn create-result-tree-pane [_ _]
   (label "TREE"))
 
 (defn update-pprint-pane [flow-id thread-id pane-id val]

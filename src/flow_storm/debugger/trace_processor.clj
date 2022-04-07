@@ -1,12 +1,10 @@
 (ns flow-storm.debugger.trace-processor
   (:require [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
-            [flow-storm.debugger.ui.main :as ui-main]
             [flow-storm.debugger.ui.utils :as ui-utils]
             [flow-storm.debugger.ui.flows.screen :as flows-screen]
             [flow-storm.debugger.ui.flows.code :as flow-code]
             [flow-storm.debugger.trace-indexer.mutable.impl :as mut-trace-indexer]
-            [clojure.pprint :as pp]
             flow-storm.tracer)
   (:import [flow_storm.tracer FlowInitTrace FormInitTrace ExecTrace FnCallTrace BindTrace]))
 
@@ -36,7 +34,7 @@
     (ui-utils/run-now (flows-screen/create-empty-flow flow-id)))
 
   FormInitTrace
-  (process [{:keys [flow-id form-id thread-id form ns def-kind mm-dispatch-val timestamp] :as t}]
+  (process [{:keys [flow-id form-id thread-id form ns def-kind mm-dispatch-val]}]
 
     ;; if thread doesn't exist, create one
     (when-not (state/get-thread dbg-state flow-id thread-id)
