@@ -26,10 +26,6 @@
      :ns "dev"}
     (dev-tester/boo [2 "hello" 8]))
 
-  (fs-api/runi
-   (/ (* (+ 1 2) 5) 15)
-   )
-
   )
 
 (add-tap (bound-fn* pp/pprint))

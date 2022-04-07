@@ -127,24 +127,3 @@
 
 
   inst-ns/trace-files-for-namespaces)
-
-(comment
-
-  (local-connect)
-
-  (trace {:flow-id 0 :disable #{}}
-   (defn factorial [n]
-     (if (zero? n)
-       1
-       (* n (factorial (dec n))))))
-
-
-  (trace {:flow-id 0 :disable #{}}
-   (defn boo [xs]
-     (reduce + (map factorial xs))))
-
-  (run
-   {}
-   (factorial 5)
-   #_(boo [2 3 4]))
-  )

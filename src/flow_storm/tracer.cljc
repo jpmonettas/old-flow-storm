@@ -160,26 +160,26 @@
 ;;    (when-let [add-tap-fn (resolve 'clojure.core/add-tap)]
 ;;     (add-tap-fn (fn [v]
 ;;                   (trace-tap tap-id tap-name v))))))
+#?(:clj
+   (defn build-ws-sender [{:keys [host port]}]
+     (let [wsc (proxy
+                   [WebSocketClient]
+                   [(URI. "ws://localhost:7722/ws")]
+                 (onOpen [^ServerHandshake handshake-data]
+                   (println "Connection opened"))
+                 (onMessage [^String message])
+                 (onClose [code reason remote?]
+                   (println "Connection closed" [code reason remote?]))
+                 (onError [^Exception e]
+                   (println "WS ERROR" e)))]
 
-(defn build-ws-sender [{:keys [host port]}]
-  (let [wsc (proxy
-                [WebSocketClient]
-                [(URI. "ws://localhost:7722/ws")]
-              (onOpen [^ServerHandshake handshake-data]
-                (println "Connection opened"))
-              (onMessage [^String message])
-              (onClose [code reason remote?]
-                (println "Connection closed" [code reason remote?]))
-              (onError [^Exception e]
-                (println "WS ERROR" e)))]
+       (.setConnectionLostTimeout wsc 0)
+       (.connect wsc)
 
-    (.setConnectionLostTimeout wsc 0)
-    (.connect wsc)
-
-    {:send-fn (fn [trace]
-                (let [trace-json-str (json/write-value-as-string trace)]                                                                  
-                  (.send wsc trace-json-str)))
-     :ws-client wsc}))
+       {:send-fn (fn [trace]
+                   (let [trace-json-str (json/write-value-as-string trace)]                                                                  
+                     (.send wsc trace-json-str)))
+        :ws-client wsc})))
 
 (defn build-file-sender [{:keys [file-path]}]
   (let [file-dos (DataOutputStream. (FileOutputStream. ^String file-path))
@@ -190,54 +190,59 @@
                 (bin-serializer/serialize-trace file-dos trace))
      :file-output-stream file-dos}))
 
+(defn log-stats [cnt qsize last-report-cnt last-report-t]  
+  #?(:clj
+     (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
+                   cnt
+                   qsize
+                   (quot (- cnt last-report-cnt)
+                         (/ (double (- (System/nanoTime) last-report-t))
+                            1000000000.0))))))
+#?(:clj
+   (defn connect
+     "Connects to the flow-storm debugger. `"
+     ([] (connect nil))
+     ([{:keys [tap-name send-fn]}]
 
-(defn connect
-  "Connects to the flow-storm debugger. `"
-  ([] (connect nil))
-  ([{:keys [tap-name send-fn]}]
+      ;; Stop the previous running `send-thread` if we have one
+      ;; since we could be trying to reconnect
+      (when send-thread (.stop send-thread))
+      
+      (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 30000000)))
+            *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
+            
+            send-thread (Thread.
+                         (fn []
+                           
+                           (while (not (.isInterrupted (Thread/currentThread)))                          
+                             (try
+                               (let [trace (.take trace-queue)                                
+                                     qsize (.size trace-queue)]
 
-   ;; Stop the previous running `send-thread` if we have one
-   ;; since we could be trying to reconnect
-   (when send-thread (.stop send-thread))
-   
-   (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 30000000)))
-         *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
-         
-         send-thread (Thread.
-                      (fn []
-                        
-                        (while (not (.isInterrupted (Thread/currentThread)))                          
-                          (try
-                            (let [trace (.take trace-queue)                                
-                                  qsize (.size trace-queue)]
-
-                              ;; Consumer stats
-                              (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                                (when (zero? (mod cnt 100000))                                 
-                                  (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
-                                                cnt
-                                                qsize
-                                                (quot (- cnt last-report-cnt)
-                                                      (/ (double (- (System/nanoTime) last-report-t))
-                                                         1000000000.0))))
-                                  (swap! *consumer-stats
-                                         assoc
-                                         :last-report-t (System/nanoTime)
-                                         :last-report-cnt cnt))
-                                
-                                (swap! *consumer-stats update :cnt inc))
-                              
-                              (send-fn trace))
-                            (catch java.lang.InterruptedException ie nil)
-                            (catch java.lang.IllegalMonitorStateException imse nil)
-                            (catch Exception e
-                              (tap> "SendThread consumer exception")
-                              (tap> e))))
-                        (tap> "Thread interrupted. Dying...")))]
-     (alter-var-root #'send-thread (constantly send-thread))
-     (.start send-thread)
-     
-     nil)))
+                                 ;; Consumer stats
+                                 (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
+                                   (when (zero? (mod cnt 100000))
+                                     
+                                     (log-stats cnt qsize last-report-cnt last-report-t)
+                                     
+                                     (swap! *consumer-stats
+                                            assoc
+                                            :last-report-t (System/nanoTime)
+                                            :last-report-cnt cnt))
+                                   
+                                   (swap! *consumer-stats update :cnt inc))
+                                 
+                                 (send-fn trace))
+                               (catch java.lang.InterruptedException ie nil)
+                               (catch java.lang.IllegalMonitorStateException imse nil)
+                               (catch Exception e
+                                 (tap> "SendThread consumer exception")
+                                 (tap> e))))
+                           (tap> "Thread interrupted. Dying...")))]
+        (alter-var-root #'send-thread (constantly send-thread))
+        (.start send-thread)
+        
+        nil))))
 
 
 (defn stop-send-thread []

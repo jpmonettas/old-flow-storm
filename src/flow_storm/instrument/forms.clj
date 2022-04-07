@@ -20,6 +20,9 @@
 (def ^:dynamic *environment*)
 
 (declare instrument-outer-form)
+(declare instrument-coll)
+(declare instrument-special-form)
+(declare instrument-function-call)
 
 (defn merge-meta
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
@@ -750,55 +753,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
-
-  (do
-    (require '[flow-storm.tracer :refer [connect]])
-    (connect))
-
-  (trace (defn foo [a b]
-     (+ a b 10)))
-
-  (trace (let [a (+ 1 2)
-               b (+ a a)]
-           (->> (range (foo a b))
-                (map inc )
-                (filter odd?)
-                (reduce +))))
-
-  (trace
-   (defn factorial [n]
-     (if (zero? n)
-       1
-       (* n (factorial (dec n))))))
-
-
-  (macroexpand-1 '(trace (let [a 5]
-                           (+ a 2))))
-  (clojure.core/binding
-      [flow-storm.tracer/*form-id* 1234838379]
-    (flow-storm.tracer/init-trace
-     flow-storm.tracer/*form-id*
-     '(let [a 5] (+ a 2)))
-    (flow-storm.tracer/add-trace
-     (let
-         [(flow-storm.tracer/add-trace a {:coor [1 0]}) 5]
-       (flow-storm.tracer/add-trace
-        (+ (flow-storm.tracer/add-trace a {:coor [2 1]}) 2)
-        {:coor [2]}))
-     {:coor []}))
-
-  (clojure.core/binding
- [flow-storm.tracer/*form-id* 1234838379]
- (flow-storm.tracer/init-trace
-  flow-storm.tracer/*form-id*
-  '(let [a 5] (+ a 2)))
- (flow-storm.tracer/add-trace
-  (let*
-   [a 5]
-   (flow-storm.tracer/add-trace
-    (+ (flow-storm.tracer/add-trace a {:coor [2 1]}) 2)
-    {:coor [2]}))
-  {:coor []}))
-
 
   )

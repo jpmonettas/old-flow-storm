@@ -6,7 +6,7 @@
             [flow-storm.debugger.target-commands :as target-commands]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
-            [flow-storm.debugger.ui.flows.code :as flow-code])
+            [flow-storm.debugger.ui.flows.code :as flows-code])
   (:import [javafx.scene.layout BorderPane Background BackgroundFill CornerRadii GridPane Priority Pane HBox VBox]
            [javafx.collections FXCollections ObservableList]
            [javafx.scene Node]
