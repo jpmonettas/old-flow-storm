@@ -1,6 +1,5 @@
 (ns flow-storm.debugger.ui.main
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box v-box]]
-            [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
             [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
             [flow-storm.debugger.ui.state-vars :as ui-vars]
