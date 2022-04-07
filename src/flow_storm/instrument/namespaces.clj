@@ -62,7 +62,7 @@
         var-symb (symbol ns-name (str var-name))]
     [(find-var var-symb) var-val]))
 
-(defn trace-form [ns form config]
+(defn instrument-form [ns form config]
   (let [ctx (inst-forms/build-form-instrumentation-ctx config (str (ns-name ns)) form nil)
 
         inst-form (try
@@ -107,7 +107,7 @@
              (= ::eof form) nil
              :else (recur))))))))
 
-(defn trace-file-forms [file config]
+(defn instrument-file-forms [file config]
   #_(print "About to instrument file " (.getFile file))
   (let [[_ ns-from-decl] (read-file-ns-decl file)]
     (if-not ns-from-decl
@@ -131,7 +131,7 @@
                  (print ".")
 
                  (do
-                   (trace-form ns form config)
+                   (instrument-form ns form config)
                    (print "I")))
 
                (catch clojure.lang.ExceptionInfo ei
@@ -145,11 +145,11 @@
                        :unknown-error (print (utils/colored-string "X" :red)))))))
            (println)))))))
 
-(defn trace-files-for-namespaces [prefixes config]
+(defn instrument-files-for-namespaces [prefixes config]
   (let [config (-> config
                    (update :excluding-ns #(or % #{}))
                    (update :disable #(or % #{})))
         ns-set (all-ns-with-prefixes prefixes config)
         files-set (interesting-files-for-namespaces ns-set)]
     (doseq [file files-set]
-      (trace-file-forms file config))))
+      (instrument-file-forms file config))))

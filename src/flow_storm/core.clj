@@ -1,18 +1,14 @@
-(ns flow-storm.commands
+(ns flow-storm.core
   (:require [flow-storm.instrument.forms :as inst-forms]
             [flow-storm.instrument.namespaces :as inst-ns]
             [flow-storm.utils :refer [log]]
             [flow-storm.tracer :as tracer]
             [clojure.repl :as clj.repl]))
 
-;; This functions are commands suppoesed to be called
-;; remotely once the remote debugger is implemented.
-;; So far they are just being called directly
-
-(defmacro trace
+(defmacro instrument
   "Recursively instrument a form for tracing."
   ;; TODO: make it possible with the trace macro to set a flow id
-  ([form] `(trace {:disable #{}} ~form)) ;; need to do this so multiarity macros work
+  ([form] `(instrument {:disable #{}} ~form)) ;; need to do this so multiarity macros work
   ([config form]
    (let [form-ns (str (ns-name *ns*))
          ctx (inst-forms/build-form-instrumentation-ctx config form-ns form &env)
@@ -30,18 +26,18 @@
 
      inst-code)))
 
-(defn trace-var [var-symb config]
+(defn instrument-var [var-symb config]
   (let [form (some->> (clj.repl/source-fn var-symb)
                       (read-string {:read-cond :allow}))
         form-ns (find-ns (symbol (namespace var-symb)))]
     (if form
 
       (binding [*ns* form-ns]
-        (inst-ns/trace-form form-ns form config))
+        (inst-ns/instrument-form form-ns form config))
 
       (log (format "Couldn't find source for %s" var-symb)))))
 
-(defn untrace-var [var-symb]
+(defn uninstrument-var [var-symb]
   (let [ns-name (namespace var-symb)]
     (binding [*ns* (find-ns (symbol ns-name))]
       (let [form (some->> (clj.repl/source-fn var-symb)
@@ -58,9 +54,9 @@
 
           (log (format "Couldn't find source for %s" var-symb)))))))
 
-(defn untrace-vars [vars-symbs]
+(defn uninstrument-vars [vars-symbs]
   (doseq [var-symb vars-symbs]
-    (untrace-var var-symb)))
+    (uninstrument-var var-symb)))
 
 (defmacro run-with-execution-ctx
   [{:keys [orig-form ns flow-id]} form]
@@ -75,10 +71,10 @@
     (binding [*ns* (find-ns (symbol form-ns))]
       (eval form))))
 
-(defn trace-form-bulk [forms config]
+(defn instrument-form-bulk [forms config]
   (doseq [{:keys [form-ns form]} forms]
     (binding [*ns* (find-ns (symbol form-ns))]
-      (inst-ns/trace-form (find-ns (symbol form-ns)) form config))))
+      (inst-ns/instrument-form (find-ns (symbol form-ns)) form config))))
 
 (defn re-run-flow [flow-id {:keys [ns form]}]
   (binding [*ns* (find-ns (symbol ns))]
@@ -89,12 +85,11 @@
 
 #_(defn ws-connect [opts]
   (let [{:keys [send-fn]} (tracer/build-ws-sender opts)]
-    (tracer/connect {:send-fn send-fn})))
+    (tracer/start-trace-sender {:send-fn send-fn})))
 
 #_(defn file-connect [opts]
   (let [{:keys [send-fn]} (tracer/build-file-sender opts)]
-    (tracer/connect {:send-fn send-fn})))
-
+    (tracer/start-trace-sender {:send-fn send-fn})))
 
 #_(def trace-ref
   "Adds a watch to ref with ref-name that traces its value changes.

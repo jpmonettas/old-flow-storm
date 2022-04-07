@@ -17,8 +17,6 @@
 
 (defonce ^Thread send-thread nil)
 
-;; (def ^:dynamic *flow-id* nil)
-;; (def ^:dynamic *init-traced-forms* nil)
 (def ^:dynamic *runtime-ctx* nil)
 
 (defn empty-runtime-ctx
@@ -42,7 +40,11 @@
       (println "Warning: can't serialize this, skipping " (type v))
       "ERROR_SERIALIZING")))
 
-(defn trace-flow-init-trace [flow-id form-ns form]
+(defn trace-flow-init-trace
+
+  "Send flow initialization trace"
+  
+  [flow-id form-ns form]
   (let [trace (trace-types/map->FlowInitTrace {:flow-id flow-id
                                                :form-ns form-ns
                                                :form form
@@ -54,7 +56,9 @@
      :cljs 0))
 
 (defn trace-form-init-trace
-  "Instrumentation function. Sends the `:init-trace` trace"
+
+  "Send form initialization trace only once for each thread."
+  
   [{:keys [form-id ns def-kind dispatch-val]} form]
   (let [{:keys [flow-id init-traced-forms]} *runtime-ctx*        
         thread-id (get-current-thread-id)]
@@ -71,7 +75,9 @@
         (swap! init-traced-forms conj [flow-id thread-id form-id])))))
 
 (defn trace-expr-exec-trace
-  "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
+  
+  "Send expression execution trace."
+  
   [result _ {:keys [coor outer-form? form-id]}]
   (let [{:keys [flow-id]} *runtime-ctx*
         trace (trace-types/map->ExecTrace {:flow-id flow-id
@@ -84,7 +90,11 @@
     (.put trace-queue trace)
     result))
 
-(defn trace-fn-call-trace [form-id ns fn-name args-vec]
+(defn trace-fn-call-trace
+
+  "Send function call traces"
+  
+  [form-id ns fn-name args-vec]
   (let [{:keys [flow-id]} *runtime-ctx*
         trace (trace-types/map->FnCallTrace {:flow-id flow-id
                                              :form-id form-id
@@ -96,7 +106,9 @@
     (.put trace-queue trace)))
 
 (defn trace-bound-trace
-  "Instrumentation function. Sends the `:bind-trace` trace"
+  
+  "Send bind trace."
+  
   [symb val {:keys [coor form-id]}]
   (let [{:keys [flow-id]} *runtime-ctx*
         trace (trace-types/map->BindTrace {:flow-id flow-id
@@ -207,50 +219,51 @@
      ))
 
 #?(:clj
-   (defn connect
-     "Connects to the flow-storm debugger. `"
-     ([] (connect nil))
-     ([{:keys [send-fn]}]
+   (defn start-trace-sender
+     
+     "Creates and starts a thread that read traces from the global `trace-queue`
+  and send them using `send-fn`"
+     
+     [{:keys [send-fn]}]
 
-      ;; Stop the previous running `send-thread` if we have one
-      ;; since we could be trying to reconnect
-      (when send-thread (.stop send-thread))
-      
-      (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 30000000)))
-            *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
-            
-            send-thread (Thread.
-                         (fn []
-                           
-                           (while (not (.isInterrupted (Thread/currentThread)))                          
-                             (try
-                               (let [trace (.take trace-queue)                                
-                                     qsize (.size trace-queue)]
+     ;; Stop the previous running `send-thread` if we have one
+     (when send-thread (.interrupt send-thread))
+     
+     (let [ _ (alter-var-root #'trace-queue (constantly (ArrayBlockingQueue. 30000000)))
+           *consumer-stats (atom {:cnt 0 :last-report-t (System/nanoTime) :last-report-cnt 0})
+           
+           send-thread (Thread.
+                        (fn []
+                          
+                          (while (not (.isInterrupted (Thread/currentThread)))                          
+                            (try
+                              (let [trace (.take trace-queue)                                
+                                    qsize (.size trace-queue)]
 
-                                 ;; Consumer stats
-                                 (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
-                                   (when (zero? (mod cnt 100000))
-                                     
-                                     (log-stats cnt qsize last-report-cnt last-report-t)
-                                     
-                                     (swap! *consumer-stats
-                                            assoc
-                                            :last-report-t (System/nanoTime)
-                                            :last-report-cnt cnt))
-                                   
-                                   (swap! *consumer-stats update :cnt inc))
-                                 
-                                 (send-fn trace))
-                               (catch java.lang.InterruptedException _ nil)
-                               (catch java.lang.IllegalMonitorStateException _ nil)
-                               (catch Exception e
-                                 (log-error "SendThread consumer exception" e))))
-                           (log "Thread interrupted. Dying...")))]
-        (alter-var-root #'send-thread (constantly send-thread))
-        (.start send-thread)
-        
-        nil))))
+                                ;; Consumer stats
+                                (let [{:keys [cnt last-report-t last-report-cnt]} @*consumer-stats]
+                                  (when (zero? (mod cnt 100000))
+                                    
+                                    (log-stats cnt qsize last-report-cnt last-report-t)
+                                    
+                                    (swap! *consumer-stats
+                                           assoc
+                                           :last-report-t (System/nanoTime)
+                                           :last-report-cnt cnt))
+                                  
+                                  (swap! *consumer-stats update :cnt inc))
+                                
+                                (send-fn trace))
+                              (catch java.lang.InterruptedException _ nil)
+                              (catch java.lang.IllegalMonitorStateException _ nil)
+                              (catch Exception e
+                                (log-error "SendThread consumer exception" e))))
+                          (log "Thread interrupted. Dying...")))]
+       (alter-var-root #'send-thread (constantly send-thread))
+       (.start send-thread)
+       
+       nil)))
 
 
-(defn stop-send-thread []
+(defn stop-trace-sender []
   (when send-thread (.interrupt send-thread)))

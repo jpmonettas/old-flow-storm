@@ -4,7 +4,7 @@
   (:require [flow-storm.tracer :as tracer]
             [flow-storm.utils :refer [log-error]]
             [flow-storm.instrument.namespaces :as inst-ns]
-            [flow-storm.commands :as commands]))
+            [flow-storm.core :as core]))
 
 (defn local-connect
 
@@ -21,11 +21,12 @@
   (let [local-dispatch-trace (resolve 'flow-storm.debugger.trace-processor/dispatch-trace)
         start-debugger       (resolve 'flow-storm.debugger.main/start-debugger)]
     (start-debugger)
-    (tracer/connect {:send-fn (fn [trace]
-                                (try
-                                  (local-dispatch-trace trace)
-                                  (catch Exception e
-                                    (log-error "Exception dispatching trace " e))))})))
+    (tracer/start-trace-sender
+     {:send-fn (fn [trace]
+                 (try
+                   (local-dispatch-trace trace)
+                   (catch Exception e
+                     (log-error "Exception dispatching trace " e))))})))
 
 (def instrument-var
 
@@ -47,7 +48,7 @@
   `opts` is a map that support :flow-id and :disable
   See `instrument-forms-for-namespaces` for :disable"
 
-  commands/trace-var)
+  core/instrument-var)
 
 (def uninstrument-var
 
@@ -55,7 +56,7 @@
 
   (uninstrument-var var-symb)"
 
-  commands/untrace-var)
+  core/uninstrument-var)
 
 (def uninstrument-vars
 
@@ -63,7 +64,7 @@
 
   (uninstrument-vars var-symbols)"
 
-  commands/untrace-vars)
+  core/uninstrument-vars)
 
 ;; TODO: deduplicate code between `run` and `runi`
 (defn- run*
@@ -94,7 +95,7 @@
           curr-ns# ~(or ns `(str (ns-name *ns*)))]
       (binding [tracer/*runtime-ctx* (tracer/empty-runtime-ctx flow-id#)]
         (tracer/trace-flow-init-trace flow-id# curr-ns# ~(list 'quote form))
-        ((commands/trace ~opts (fn [] ~form)))))))
+        ((core/instrument ~opts (fn [] ~form)))))))
 
 (defmacro runi
 
@@ -126,4 +127,4 @@
 
 
 
-  inst-ns/trace-files-for-namespaces)
+  inst-ns/instrument-files-for-namespaces)

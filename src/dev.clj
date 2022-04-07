@@ -29,7 +29,7 @@
 #_(add-tap (bound-fn* pp/pprint))
 
 (defn local-restart-everything []
-  (tracer/stop-send-thread)
+  (tracer/stop-trace-sender)
   (ui-main/close-stage)
 
   ;; reload all namespaces

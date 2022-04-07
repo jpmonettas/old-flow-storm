@@ -1,3 +1,9 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Important                                  ;;
+;;                                            ;;
+;; This is currently unused. Just experiments ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (ns flow-storm.binary-serializer
   (:import [java.io DataOutputStream]))
 

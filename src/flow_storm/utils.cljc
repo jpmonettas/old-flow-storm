@@ -1,7 +1,7 @@
 (ns flow-storm.utils)
 
 (defn read-trace-tag [form]
-  `(flow-storm.commands/trace ~form))
+  `(flow-storm.core/instrument ~form))
 
 (defn read-rtrace-tag [form]
   `(flow-storm.api/runi ~form))
