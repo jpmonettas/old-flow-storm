@@ -3,7 +3,7 @@
             [flow-storm.debugger.ui.styles :as styles]
             [flow-storm.debugger.ui.flows :as ui-flows]
             [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
-            [flow-storm.debugger.ui.state-vars :as state-vars]
+            [flow-storm.debugger.ui.state-vars :as ui-vars]
             [clojure.java.io :as io])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
@@ -89,7 +89,7 @@
                                      (= key-name "G"))
                                 (do
                                   (tap> "Interrupting long running task")
-                                  (.interrupt @state-vars/long-running-task-thread))
+                                  (.interrupt @ui-vars/long-running-task-thread))
 
                                 :else
                                 (tap> (format "Unhandled keypress %s" key-name)))))))

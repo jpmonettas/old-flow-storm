@@ -1,7 +1,7 @@
 (ns flow-storm.debugger.trace-indexer.mutable.impl
   (:require [flow-storm.debugger.trace-indexer.protos :refer [TraceIndex]]
             [flow-storm.debugger.trace-indexer.mutable.callstack-tree :as callstack-tree]
-            [flow-storm.debugger.ui.state-vars :as state-vars]
+            [flow-storm.debugger.ui.state-vars :as ui-vars]
             [clojure.string :as str]
             [clojure.spec.alpha :as s]
             [flow-storm.utils :as utils])
@@ -140,7 +140,7 @@
                                   (when (.isInterrupted (Thread/currentThread))
                                     (tap> "Search stopped"))
                                   (on-result-cb match-stack)))))]
-         (reset! state-vars/long-running-task-thread search-thread)
+         (reset! ui-vars/long-running-task-thread search-thread)
          (.start search-thread))))))
 
 (defn make-indexer []

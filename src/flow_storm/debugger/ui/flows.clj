@@ -1,5 +1,5 @@
 (ns flow-storm.debugger.ui.flows
-  (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as state-vars]
+  (:require [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later run-now v-box h-box label]]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
             [clojure.pprint :as pp]
@@ -51,7 +51,7 @@
 
 
     ;; clean ui state vars
-    (state-vars/clean-flow-objs flow-id)))
+    (ui-vars/clean-flow-objs flow-id)))
 
 (defn create-empty-flow [flow-id]
   (let [[^TabPane flows-tabs-pane] (obj-lookup "flows_tabs_pane")
@@ -77,14 +77,14 @@
               (.setSpacing 5))
         scroll-pane (ScrollPane.)]
     (.setContent scroll-pane box)
-    (store-obj flow-id (state-vars/thread-forms-box-id thread-id) box)
-    (store-obj flow-id (state-vars/thread-forms-scroll-id thread-id) scroll-pane)
+    (store-obj flow-id (ui-vars/thread-forms-box-id thread-id) box)
+    (store-obj flow-id (ui-vars/thread-forms-scroll-id thread-id) scroll-pane)
     scroll-pane))
 
 (defn create-pprint-pane [flow-id thread-id pane-id]
   (let [result-text-area (doto (TextArea.)
                            (.setEditable false))]
-    (store-obj flow-id (state-vars/thread-pprint-text-area-id thread-id pane-id) result-text-area)
+    (store-obj flow-id (ui-vars/thread-pprint-text-area-id thread-id pane-id) result-text-area)
     result-text-area))
 
 (defn create-result-tree-pane [flow-id thread-id]
@@ -93,7 +93,7 @@
 
 (defn update-pprint-pane [flow-id thread-id pane-id val]
   ;; TODO: find and update the tree
-  (let [[^TextArea text-area] (obj-lookup flow-id (state-vars/thread-pprint-text-area-id thread-id pane-id))
+  (let [[^TextArea text-area] (obj-lookup flow-id (ui-vars/thread-pprint-text-area-id thread-id pane-id))
         val-str (with-out-str
                   (binding [clojure.core/*print-level* 7
                             clojure.core/*print-length* 50]
@@ -158,7 +158,7 @@
                                             :on-click (fn []
                                                         (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
                                                               {:keys [form-id fn-ns fn-name]} (first (.getSelectedItems fns-list-selection))
-                                                              [observable-fn-calls-list] (obj-lookup flow-id (state-vars/thread-instrument-fn-calls-list-id thread-id))
+                                                              [observable-fn-calls-list] (obj-lookup flow-id (ui-vars/thread-instrument-fn-calls-list-id thread-id))
                                                               fn-call-traces (indexer/find-fn-calls indexer fn-ns fn-name form-id)]
                                                           (doto observable-fn-calls-list
                                                             .clear
@@ -178,7 +178,7 @@
                                     (.getScreenY mev))))))
 
     (.setSelectionMode fns-list-selection SelectionMode/MULTIPLE)
-    (store-obj flow-id (state-vars/thread-instrument-list-id thread-id) observable-fns-list)
+    (store-obj flow-id (ui-vars/thread-instrument-list-id thread-id) observable-fns-list)
     fns-list-view))
 
 (defn- create-fn-calls-list-pane [flow-id thread-id]
@@ -187,7 +187,7 @@
                             (call [lv]
                               (ui-utils/create-list-cell-factory
                                (fn [list-cell {:keys [args-vec]}]
-                                 (let [[args-print-type-combo] (obj-lookup flow-id (state-vars/thread-fn-args-print-combo thread-id))
+                                 (let [[args-print-type-combo] (obj-lookup flow-id (ui-vars/thread-fn-args-print-combo thread-id))
                                        [print-args-type _] (.getSelectedItem (.getSelectionModel args-print-type-combo))
                                        arg-selector (fn [n]
                                                       (when (< n (count args-vec))
@@ -227,7 +227,7 @@
                                                       (toString [[_ text]] text)))
                                 (.setCellFactory combo-cell-factory))
         _ (.selectFirst (.getSelectionModel args-print-type-combo))
-        _ (store-obj flow-id (state-vars/thread-fn-args-print-combo thread-id) args-print-type-combo)
+        _ (store-obj flow-id (ui-vars/thread-fn-args-print-combo thread-id) args-print-type-combo)
         fn-call-list-view (doto (ListView. observable-fn-calls-list)
                             (.setEditable false)
                             (.setCellFactory list-cell-factory))
@@ -253,7 +253,7 @@
                                     (.getScreenY mev))))))
 
     (.setSelectionMode fn-call-list-selection SelectionMode/SINGLE)
-    (store-obj flow-id (state-vars/thread-instrument-fn-calls-list-id thread-id) observable-fn-calls-list)
+    (store-obj flow-id (ui-vars/thread-instrument-fn-calls-list-id thread-id) observable-fn-calls-list)
     fn-call-list-pane))
 
 (defn- create-instrument-pane [flow-id thread-id]
@@ -267,7 +267,7 @@
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
         fn-call-stats (->> (state/fn-call-stats dbg-state flow-id thread-id)
                            (sort-by :cnt >))
-        [^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-instrument-list-id thread-id))]
+        [^ObservableList observable-bindings-list] (obj-lookup flow-id (ui-vars/thread-instrument-list-id thread-id))]
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object fn-call-stats))))
 
@@ -285,11 +285,11 @@
         locals-list-view (doto (ListView. observable-bindings-list)
                            (.setEditable false)
                            (.setCellFactory cell-factory))]
-    (store-obj flow-id (state-vars/thread-locals-list-id thread-id) observable-bindings-list)
+    (store-obj flow-id (ui-vars/thread-locals-list-id thread-id) observable-bindings-list)
     locals-list-view))
 
 (defn- update-locals-pane [flow-id thread-id bindings]
-  (let [[^ObservableList observable-bindings-list] (obj-lookup flow-id (state-vars/thread-locals-list-id thread-id))]
+  (let [[^ObservableList observable-bindings-list] (obj-lookup flow-id (ui-vars/thread-locals-list-id thread-id))]
     (.clear observable-bindings-list)
     (.addAll observable-bindings-list (into-array Object bindings))))
 
@@ -330,7 +330,7 @@
                              (isLeaf [] (empty? calls)))))
         tree-root-node (indexer/callstack-tree-root indexer)
         root-item (lazy-tree-item tree-root-node)
-        [tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))]
+        [tree-view] (obj-lookup flow-id (ui-vars/thread-callstack-tree-view-id thread-id))]
 
     (.setRoot ^TreeView tree-view root-item)))
 
@@ -375,8 +375,8 @@
                                       (.getScreenY mev)))))))))
 
 (defn- select-call-stack-tree-node [flow-id thread-id match-trace-idx]
-  (let [[tree-view] (obj-lookup flow-id (state-vars/thread-callstack-tree-view-id thread-id))
-        [^TreeItem tree-item] (obj-lookup flow-id (state-vars/thread-callstack-tree-item thread-id match-trace-idx))
+  (let [[tree-view] (obj-lookup flow-id (ui-vars/thread-callstack-tree-view-id thread-id))
+        [^TreeItem tree-item] (obj-lookup flow-id (ui-vars/thread-callstack-tree-item thread-id match-trace-idx))
         tree-selection-model (.getSelectionModel tree-view)]
     (.select ^SelectionModel tree-selection-model tree-item)))
 
@@ -458,7 +458,7 @@
                                                  thread-id))
                                    (.setTooltip (Tooltip. (format "Trace Idx : %d" frame-trace-idx))))
 
-                                 (store-obj flow-id (state-vars/thread-callstack-tree-item thread-id frame-trace-idx) tree-item)
+                                 (store-obj flow-id (ui-vars/thread-callstack-tree-item thread-id frame-trace-idx) tree-item)
 
                                  (doto tree-item
                                    (.addEventHandler (TreeItem/branchCollapsedEvent)
@@ -493,7 +493,7 @@
                           (update-pprint-pane flow-id thread-id "fn_args" args)
                           (update-pprint-pane flow-id thread-id "fn_ret" ret))))))
 
-    (store-obj flow-id (state-vars/thread-callstack-tree-view-id thread-id) tree-view)
+    (store-obj flow-id (ui-vars/thread-callstack-tree-view-id thread-id) tree-view)
     (VBox/setVgrow tree-view Priority/ALWAYS)
     (v-box [search-pane
             tree-view
@@ -534,7 +534,7 @@
         form (indexer/get-form indexer form-id)
         print-tokens (binding [pp/*print-right-margin* 80]
                        (form-pprinter/pprint-tokens (:form/form form)))
-        [forms-box] (obj-lookup flow-id (state-vars/thread-forms-box-id thread-id))
+        [forms-box] (obj-lookup flow-id (ui-vars/thread-forms-box-id thread-id))
         tokens-texts (->> print-tokens
                           (map (fn [tok]
                                  (let [text (Text.
@@ -544,7 +544,7 @@
                                                (first tok)))
                                        _ (ui-utils/add-class text "code-token")
                                        coord (when (vector? tok) (second tok))]
-                                   (store-obj flow-id (state-vars/form-token-id thread-id form-id coord) text)
+                                   (store-obj flow-id (ui-vars/form-token-id thread-id form-id coord) text)
                                    text))))
         ns-label (doto (label (format "ns: %s" (:form/ns form)))
                    (.setFont (Font. 10)))
@@ -555,7 +555,7 @@
 
         form-pane (v-box [form-header form-text-flow] "form-pane")
         ]
-    (store-obj flow-id (state-vars/thread-form-box-id thread-id form-id) form-pane)
+    (store-obj flow-id (ui-vars/thread-form-box-id thread-id form-id) form-pane)
 
     (-> forms-box
         .getChildren
@@ -564,7 +564,7 @@
     form-pane))
 
 (defn- update-thread-trace-count-lbl [flow-id thread-id cnt]
-  (let [[^Label lbl] (obj-lookup flow-id (state-vars/thread-trace-count-lbl-id thread-id))]
+  (let [[^Label lbl] (obj-lookup flow-id (ui-vars/thread-trace-count-lbl-id thread-id))]
     (.setText lbl (str cnt))))
 
 (defn- un-highlight [^Text token-text]
@@ -575,8 +575,8 @@
 (defn highlight-form [flow-id thread-id form-id]
   (let [indexer (state/thread-trace-indexer dbg-state flow-id thread-id)
         form (indexer/get-form indexer form-id)
-        [form-pane]          (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))
-        [thread-scroll-pane] (obj-lookup flow-id (state-vars/thread-forms-scroll-id thread-id))
+        [form-pane]          (obj-lookup flow-id (ui-vars/thread-form-box-id thread-id form-id))
+        [thread-scroll-pane] (obj-lookup flow-id (ui-vars/thread-forms-scroll-id thread-id))
 
         ;; if the form we are about to highlight doesn't exist in the view add it first
         form-pane (or form-pane (add-form flow-id thread-id form-id))
@@ -609,7 +609,7 @@
     (ui-utils/add-class form-pane "form-background-highlighted")))
 
 (defn- unhighlight-form [flow-id thread-id form-id]
-  (let [[form-pane] (obj-lookup flow-id (state-vars/thread-form-box-id thread-id form-id))]
+  (let [[form-pane] (obj-lookup flow-id (ui-vars/thread-form-box-id thread-id form-id))]
     (doto form-pane
       (.setOnMouseClicked (event-handler [_])))
     (ui-utils/rm-class form-pane "form-background-highlighted")))
@@ -623,7 +623,7 @@
             curr-form-id (:form-id curr-trace)
             next-trace (indexer/get-trace indexer next-trace-idx)
             next-form-id (:form-id next-trace)
-            [^Label curr_trace_lbl] (obj-lookup flow-id (state-vars/thread-curr-trace-lbl-id thread-id))
+            [^Label curr_trace_lbl] (obj-lookup flow-id (ui-vars/thread-curr-trace-lbl-id thread-id))
             ;; because how frames are cached by trace, their pointers can't be compared
             ;; so a content comparision is needed. Comparing :call-trace-idx is enough since it is
             ;; a frame
@@ -643,7 +643,7 @@
             (highlight-form flow-id thread-id next-form-id)
 
             (doseq [{:keys [coor]} curr-form-interesting-expr-traces]
-              (let [token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id curr-form-id coor))]
+              (let [token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id curr-form-id coor))]
                 (doseq [text token-texts]
                   (un-highlight text))))))
 
@@ -655,7 +655,7 @@
                                                   (group-by :coor))]
 
             (doseq [[coor traces] interesting-expr-traces-grps]
-              (let [token-id (state-vars/form-token-id thread-id next-form-id coor)
+              (let [token-id (ui-vars/form-token-id thread-id next-form-id coor)
                     token-texts (obj-lookup flow-id token-id)]
                 (doseq [text token-texts]
                   (arm-interesting text traces)
@@ -663,7 +663,7 @@
 
         ;; "unhighlight" prev executing tokens
         (when (and (utils/exec-trace? curr-trace))
-          (let [curr-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
+          (let [curr-token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id
                                                                                (:form-id curr-trace)
                                                                                (:coor curr-trace)))]
             (doseq [text curr-token-texts]
@@ -673,7 +673,7 @@
 
         ;; highlight executing tokens
         (when (utils/exec-trace? next-trace)
-          (let [next-token-texts (obj-lookup flow-id (state-vars/form-token-id thread-id
+          (let [next-token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id
                                                                                (:form-id next-trace)
                                                                                (:coor next-trace)))]
             (doseq [text next-token-texts]
@@ -697,8 +697,8 @@
         curr-trace-lbl (label "0")
         separator-lbl (label "/")
         thread-trace-count-lbl (label "-")
-        _ (store-obj flow-id (state-vars/thread-curr-trace-lbl-id thread-id) curr-trace-lbl)
-        _ (store-obj flow-id (state-vars/thread-trace-count-lbl-id thread-id) thread-trace-count-lbl)
+        _ (store-obj flow-id (ui-vars/thread-curr-trace-lbl-id thread-id) curr-trace-lbl)
+        _ (store-obj flow-id (ui-vars/thread-trace-count-lbl-id thread-id) thread-trace-count-lbl)
         next-btn (doto (ui-utils/icon-button "mdi-chevron-right")
                    (.setOnAction (event-handler
                                   [ev]
