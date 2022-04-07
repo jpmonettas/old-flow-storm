@@ -2,6 +2,7 @@
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box]]
             [flow-storm.debugger.ui.flows.screen :as flows-screen]
             [flow-storm.debugger.ui.state-vars :as ui-vars :refer [main-pane stage scene obj-lookup]]
+            [flow-storm.utils :refer [log log-error]]
             [clojure.java.io :as io])
   (:import [javafx.scene Scene]
            [javafx.stage Stage]
@@ -86,11 +87,11 @@
                                 (and (.isControlDown kev)
                                      (= key-name "G"))
                                 (do
-                                  (tap> "Interrupting long running task")
+                                  (log "Interrupting long running task")
                                   (.interrupt @ui-vars/long-running-task-thread))
 
                                 :else
-                                (tap> (format "Unhandled keypress %s" key-name)))))))
+                                (log (format "Unhandled keypress %s" key-name)))))))
 
        (doto (.getStylesheets scene)
          (.add (str (io/resource "styles.css"))))
@@ -105,5 +106,4 @@
      (-> stage .show)
 
      (catch Exception e
-       (tap> (str "UI Thread exception"
-                  (with-out-str (.printStackTrace e))))))))
+       (log-error "UI Thread exception" e)))))

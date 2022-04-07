@@ -1,4 +1,5 @@
 (ns flow-storm.debugger.ui.utils
+  (:require [flow-storm.utils :refer [log-error]])
   (:import [javafx.scene.control Button ContextMenu Label ListCell MenuItem ScrollPane Tab]
            [javafx.scene.layout HBox VBox]
            [javafx.scene Node]
@@ -14,8 +15,7 @@
                  (try
                    ~@body
                    (catch Exception e#
-                     (tap> (str "Exception in UI thread @1 " (.getMessage e#)))
-                     (tap> e#))))))
+                     (log-error (str "Exception in UI thread @1 " (.getMessage e#)) e#))))))
 
 (defn run-now*
   [f]
@@ -23,9 +23,7 @@
     (run-later
      (deliver result (try (f)
                           (catch Exception e
-                            (tap> (str "Exception in UI thread @2" (.getMessage e)))
-                            (tap> e)
-                            (tap> (.getCause e))))))
+                            (log-error (str "Exception in UI thread @2" (.getMessage e)) e)))))
     @result))
 
 (defmacro run-now

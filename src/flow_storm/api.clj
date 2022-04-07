@@ -2,6 +2,7 @@
   "This is the only namespace intended for users.
   Provides functionality to connect to the debugger and instrument forms."
   (:require [flow-storm.tracer :as tracer]
+            [flow-storm.utils :refer [log-error]]
             [flow-storm.instrument.namespaces :as inst-ns]
             [flow-storm.commands :as commands]))
 
@@ -24,8 +25,7 @@
                                 (try
                                   (local-dispatch-trace trace)
                                   (catch Exception e
-                                    (tap> (str "Exception dispatching trace " (.getMessage e)))
-                                    (tap> e))))})))
+                                    (log-error "Exception dispatching trace " e))))})))
 
 (def instrument-var
 

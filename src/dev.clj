@@ -2,8 +2,8 @@
   (:require [flow-storm.debugger.ui.main :as ui-main]
             [flow-storm.api :as fs-api]
             [flow-storm.tracer :as tracer]
+            [flow-storm.utils :refer [log-error]]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [clojure.pprint :as pp]
             [dev-tester]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -26,7 +26,7 @@
 
   )
 
-(add-tap (bound-fn* pp/pprint))
+#_(add-tap (bound-fn* pp/pprint))
 
 (defn local-restart-everything []
   (tracer/stop-send-thread)
@@ -40,6 +40,5 @@
 (Thread/setDefaultUncaughtExceptionHandler
    (reify
      Thread$UncaughtExceptionHandler
-     (uncaughtException [_ thread throwable]
-       (tap> (str "Unhandled exception " thread throwable))
-       (tap> throwable))))
+     (uncaughtException [_ _ throwable]
+       (log-error "Unhandled exception" throwable))))

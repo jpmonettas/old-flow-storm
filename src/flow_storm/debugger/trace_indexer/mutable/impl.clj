@@ -2,8 +2,9 @@
   (:require [flow-storm.debugger.trace-indexer.protos :refer [TraceIndex]]
             [flow-storm.debugger.trace-indexer.mutable.callstack-tree :as callstack-tree]
             [flow-storm.debugger.ui.state-vars :as ui-vars]
-            [clojure.string :as str]
-            [flow-storm.utils :as utils])
+            [flow-storm.utils :as utils :refer [log]]
+            [flow-storm.trace-types :as trace-types]
+            [clojure.string :as str])
   (:import [java.util ArrayList HashMap]))
 
 (deftype MutableTraceIndexer [^ArrayList traces
@@ -119,7 +120,7 @@
                                                        (on-progress (* 100 (/ i total-traces))))
 
                                                      (let [{:keys [fn-name args-vec] :as t} (.get traces i)]
-                                                       (if (utils/fn-call-trace? t)
+                                                       (if (trace-types/fn-call-trace? t)
 
 
                                                          (if (and (> i from-idx)
@@ -136,7 +137,7 @@
                                                            (recur (inc i) (pop stack))
                                                            (recur (inc i) stack))))))]
                                  (when (.isInterrupted (Thread/currentThread))
-                                   (tap> "Search stopped"))
+                                   (log "Search stopped"))
                                  (on-result-cb match-stack)))))]
         (reset! ui-vars/long-running-task-thread search-thread)
         (.start search-thread)))))

@@ -7,7 +7,7 @@
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.target-commands :as target-commands]
-            [flow-storm.utils :as utils])
+            [flow-storm.trace-types :as trace-types])
   (:import [javafx.scene.control Label ListView ScrollPane Tab TabPane TabPane$TabClosingPolicy SplitPane]
            [javafx.collections FXCollections ObservableList]
            [javafx.scene Node]
@@ -201,7 +201,7 @@
                   (highlight-interesting text))))))
 
         ;; "unhighlight" prev executing tokens
-        (when (utils/exec-trace? curr-trace)
+        (when (trace-types/exec-trace? curr-trace)
           (let [curr-token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id
                                                                             (:form-id curr-trace)
                                                                             (:coor curr-trace)))]
@@ -211,7 +211,7 @@
                 (un-highlight text)))))
 
         ;; highlight executing tokens
-        (when (utils/exec-trace? next-trace)
+        (when (trace-types/exec-trace? next-trace)
           (let [next-token-texts (obj-lookup flow-id (ui-vars/form-token-id thread-id
                                                                             (:form-id next-trace)
                                                                             (:coor next-trace)))]

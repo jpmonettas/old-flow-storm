@@ -201,7 +201,7 @@
                          ;; :validator (fn [next-state]
                          ;;              (if-not (s/valid? ::state next-state)
                          ;;                (do
-                         ;;                  (tap> (str "STATE Error" (with-out-str (s/explain ::state next-state))))
+                         ;;                  (log (str "STATE Error" (with-out-str (s/explain ::state next-state))))
                          ;;                  false)
 
                          ;;                true))

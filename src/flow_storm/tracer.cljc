@@ -1,6 +1,12 @@
 (ns flow-storm.tracer
-  (:require [flow-storm.binary-serializer :as bin-serializer]
-            #?(:clj [jsonista.core :as json]))
+  #?(:clj
+     (:require [flow-storm.binary-serializer :as bin-serializer]            
+               [flow-storm.utils :refer [log log-error]]
+               [jsonista.core :as json]
+               [flow-storm.trace-types :as trace-types]))
+  #?(:cljs (:require [flow-storm.binary-serializer :as bin-serializer]
+                     [flow-storm.trace-types :as trace-types]))
+  
   #?(:clj (:import [java.util.concurrent ArrayBlockingQueue]
                    [org.java_websocket.client WebSocketClient]
                    [java.net URI]
@@ -21,12 +27,6 @@
    {:flow-id (or flow-id (rand-int 1000))
     :init-traced-forms (atom #{})}))
 
-(defrecord FlowInitTrace [flow-id form-ns form timestamp])
-(defrecord FormInitTrace [flow-id form-id thread-id form ns def-kind mm-dispatch-val timestamp])
-(defrecord ExecTrace [flow-id form-id coor thread-id result outer-form?])
-(defrecord FnCallTrace [flow-id form-id fn-name fn-ns thread-id args-vec timestamp])
-(defrecord BindTrace [flow-id form-id coor thread-id timestamp symbol value])
-
 (defn get-timestamp []
   #?(:cljs (.getTime (js/Date.))
      :clj (System/currentTimeMillis)))
@@ -43,10 +43,10 @@
       "ERROR_SERIALIZING")))
 
 (defn trace-flow-init-trace [flow-id form-ns form]
-  (let [trace (map->FlowInitTrace {:flow-id flow-id
-                                   :form-ns form-ns
-                                   :form form
-                                   :timestamp (get-timestamp)})]
+  (let [trace (trace-types/map->FlowInitTrace {:flow-id flow-id
+                                               :form-ns form-ns
+                                               :form form
+                                               :timestamp (get-timestamp)})]
     (.put trace-queue trace)))
 
 (defn get-current-thread-id []
@@ -59,14 +59,14 @@
   (let [{:keys [flow-id init-traced-forms]} *runtime-ctx*        
         thread-id (get-current-thread-id)]
     (when-not (contains? @init-traced-forms [flow-id thread-id form-id])
-      (let [trace (map->FormInitTrace {:flow-id flow-id
-                                       :form-id form-id
-                                       :thread-id thread-id
-                                       :form form
-                                       :ns ns
-                                       :def-kind def-kind
-                                       :mm-dispatch-val dispatch-val
-                                       :timestamp (get-timestamp)})]
+      (let [trace (trace-types/map->FormInitTrace {:flow-id flow-id
+                                                   :form-id form-id
+                                                   :thread-id thread-id
+                                                   :form form
+                                                   :ns ns
+                                                   :def-kind def-kind
+                                                   :mm-dispatch-val dispatch-val
+                                                   :timestamp (get-timestamp)})]
         (.put trace-queue trace)
         (swap! init-traced-forms conj [flow-id thread-id form-id])))))
 
@@ -74,38 +74,38 @@
   "Instrumentation function. Sends the `:exec-trace` trace and returns the result."
   [result _ {:keys [coor outer-form? form-id]}]
   (let [{:keys [flow-id]} *runtime-ctx*
-        trace (map->ExecTrace {:flow-id flow-id
-                               :form-id form-id
-                               :coor coor
-                               :thread-id (get-current-thread-id)
-                               :timestamp (get-timestamp)
-                               :result result
-                               :outer-form? outer-form?})]
+        trace (trace-types/map->ExecTrace {:flow-id flow-id
+                                           :form-id form-id
+                                           :coor coor
+                                           :thread-id (get-current-thread-id)
+                                           :timestamp (get-timestamp)
+                                           :result result
+                                           :outer-form? outer-form?})]
     (.put trace-queue trace)
     result))
 
 (defn trace-fn-call-trace [form-id ns fn-name args-vec]
   (let [{:keys [flow-id]} *runtime-ctx*
-        trace (map->FnCallTrace {:flow-id flow-id
-                                 :form-id form-id
-                                 :fn-name fn-name
-                                 :fn-ns ns
-                                 :thread-id (get-current-thread-id)
-                                 :args-vec args-vec
-                                 :timestamp (get-timestamp)})]
+        trace (trace-types/map->FnCallTrace {:flow-id flow-id
+                                             :form-id form-id
+                                             :fn-name fn-name
+                                             :fn-ns ns
+                                             :thread-id (get-current-thread-id)
+                                             :args-vec args-vec
+                                             :timestamp (get-timestamp)})]
     (.put trace-queue trace)))
 
 (defn trace-bound-trace
   "Instrumentation function. Sends the `:bind-trace` trace"
   [symb val {:keys [coor form-id]}]
   (let [{:keys [flow-id]} *runtime-ctx*
-        trace (map->BindTrace {:flow-id flow-id
-                               :form-id form-id
-                               :coor (or coor [])
-                               :thread-id (get-current-thread-id)
-                               :timestamp (get-timestamp)
-                               :symbol (name symb)
-                               :value val})]
+        trace (trace-types/map->BindTrace {:flow-id flow-id
+                                           :form-id form-id
+                                           :coor (or coor [])
+                                           :thread-id (get-current-thread-id)
+                                           :timestamp (get-timestamp)
+                                           :symbol (name symb)
+                                           :value val})]
     (.put trace-queue trace)))
 
 ;; (defn ref-init-trace
@@ -195,7 +195,7 @@
 
 #?(:clj
    (defn log-stats [cnt qsize last-report-cnt last-report-t]  
-     (tap> (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
+     (log (format "CNT: %d, Q_SIZE: %d, Speed: %.1f tps"
                    cnt
                    qsize
                    (quot (- cnt last-report-cnt)
@@ -244,9 +244,8 @@
                                (catch java.lang.InterruptedException _ nil)
                                (catch java.lang.IllegalMonitorStateException _ nil)
                                (catch Exception e
-                                 (tap> "SendThread consumer exception")
-                                 (tap> e))))
-                           (tap> "Thread interrupted. Dying...")))]
+                                 (log-error "SendThread consumer exception" e))))
+                           (log "Thread interrupted. Dying...")))]
         (alter-var-root #'send-thread (constantly send-thread))
         (.start send-thread)
         

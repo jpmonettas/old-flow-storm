@@ -1,6 +1,7 @@
 (ns flow-storm.commands
   (:require [flow-storm.instrument.forms :as inst-forms]
             [flow-storm.instrument.namespaces :as inst-ns]
+            [flow-storm.utils :refer [log]]
             [flow-storm.tracer :as tracer]
             [clojure.repl :as clj.repl]))
 
@@ -38,7 +39,7 @@
       (binding [*ns* form-ns]
         (inst-ns/trace-form form-ns form config))
 
-      (println "Couldn't find source for " var-symb))))
+      (log (format "Couldn't find source for %s" var-symb)))))
 
 (defn untrace-var [var-symb]
   (let [ns-name (namespace var-symb)]
@@ -51,11 +52,11 @@
           (if (inst-forms/expanded-def-form? expanded-form)
             (let [[v vval] (inst-ns/expanded-defn-parse ns-name expanded-form)]
               (alter-var-root v (fn [_] (eval vval)))
-              (tap> (format "Untraced %s" v)))
+              (log (format "Untraced %s" v)))
 
-            (tap> (format "Don't know howto untrace %s" (pr-str expanded-form))))
+            (log (format "Don't know howto untrace %s" (pr-str expanded-form))))
 
-          (println "Couldn't find source for " var-symb))))))
+          (log (format "Couldn't find source for %s" var-symb)))))))
 
 (defn untrace-vars [vars-symbs]
   (doseq [var-symb vars-symbs]

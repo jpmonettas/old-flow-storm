@@ -1,6 +1,4 @@
-(ns flow-storm.utils
-  (:require [flow-storm.tracer])
-  (:import [flow_storm.tracer FnCallTrace ExecTrace]))
+(ns flow-storm.utils)
 
 (defn read-trace-tag [form]
   `(flow-storm.commands/trace ~form))
@@ -18,8 +16,23 @@
    (defn colored-string [_ _]
      "UNIMPLEMENTED"))
 
-(defn fn-call-trace? [trace]
-  (instance? FnCallTrace trace))
+#?(:clj
+   (defn log [msg]
+     (println msg))
+   :cljs
+   (defn log [msg]
+     (js/console.log msg)))
 
-(defn exec-trace? [trace]
-  (instance? ExecTrace trace))
+#?(:clj
+   (defn log-error
+     ([msg] (binding [*out* *err*]
+              (println msg)))
+     ([msg e]
+      (binding [*out* *err*]
+        (println msg)
+        (.printStackTrace e))))
+   :cljs
+   (defn log-error
+     ([msg] (js/console.error msg))
+     ([msg e]
+      (js/console.error msg e))))

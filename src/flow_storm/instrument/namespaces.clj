@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [clojure.java.io :as io]
             [clojure.tools.reader :as reader]
-            [flow-storm.utils :as utils])
+            [flow-storm.utils :as utils :refer [log]])
   (:import [java.io PushbackReader]))
 
 (defn all-ns-with-prefixes [prefixes {:keys [excluding-ns]}]
@@ -78,8 +78,7 @@
           (alter-var-root v (fn [_] (eval vval))))
         (eval inst-form))
       (catch Exception e
-        #_(tap> (pr-str inst-form))
-        #_(tap> e)
+        #_(log-error "Evaluating form" e)
         (let [e-msg (.getMessage e)
               ex-type (cond
 
@@ -113,7 +112,7 @@
   (let [[_ ns-from-decl] (read-file-ns-decl file)]
     (if-not ns-from-decl
 
-      (println (format "Warning, skipping %s since it doesn't contain a (ns ) decl. We don't support (in-ns ...) yet." (.getFile file)))
+      (log (format "Warning, skipping %s since it doesn't contain a (ns ) decl. We don't support (in-ns ...) yet." (.getFile file)))
 
       ;; this is IMPORTANT, once we have `ns-from-decl` all the instrumentation work
       ;; should be done as if we where in `ns-from-decl`
@@ -123,7 +122,7 @@
          (let [ns (find-ns ns-from-decl)
                file-forms (read-string {:read-cond :allow}
                                        (format "[%s]" (slurp file)))]
-           (println (format "Instrumenting namespace: %s Forms (%d) (%s)" ns-from-decl (count file-forms) (.getFile file)))
+           (log (format "Instrumenting namespace: %s Forms (%d) (%s)" ns-from-decl (count file-forms) (.getFile file)))
 
            (doseq [form file-forms]
              (try
@@ -139,7 +138,7 @@
                  (let [ex-type (:type (ex-data ei))]
                    ;; Enable for debugging unknown errors
                    #_(when (= ex-type :unknown-error)
-                       (println (ex-message ei))
+                       (log (ex-message ei))
                        (System/exit 1))
                    (case ex-type
                        :known-error   (print (utils/colored-string "X" :yellow))

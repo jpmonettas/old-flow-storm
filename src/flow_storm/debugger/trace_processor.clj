@@ -6,7 +6,7 @@
             [flow-storm.debugger.ui.flows.code :as flow-code]
             [flow-storm.debugger.trace-indexer.mutable.impl :as mut-trace-indexer]
             flow-storm.tracer)
-  (:import [flow_storm.tracer FlowInitTrace FormInitTrace ExecTrace FnCallTrace BindTrace]))
+  (:import [flow_storm.trace_types FlowInitTrace FormInitTrace ExecTrace FnCallTrace BindTrace]))
 
 (defprotocol ProcessTrace
   (process [_]))

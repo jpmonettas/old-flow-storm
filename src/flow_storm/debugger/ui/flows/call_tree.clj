@@ -2,6 +2,7 @@
   (:require [flow-storm.debugger.ui.flows.code :as flow-code]
             [flow-storm.debugger.ui.flows.components :as flow-cmp]
             [flow-storm.debugger.trace-indexer.protos :as indexer]
+            [flow-storm.utils :refer [log]]
             [flow-storm.debugger.ui.state-vars :refer [store-obj obj-lookup] :as ui-vars]
             [flow-storm.debugger.state :as state :refer [dbg-state]]
             [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler v-box h-box label]])
@@ -97,7 +98,7 @@
         _ (doto search-btn
               (.setOnAction (event-handler
                              [_]
-                             (tap> "Searching")
+                             (log "Searching")
                              (.setDisable search-btn true)
                              (state/callstack-tree-collapse-all-calls dbg-state flow-id thread-id)
                              (indexer/search-next-fn-call-trace
@@ -108,7 +109,7 @@
                               (fn [next-match-path]
                                 (if next-match-path
                                   (let [[match-trace-idx] next-match-path]
-                                    (tap> (format "Next match at %s" next-match-path))
+                                    (log (format "Next match at %s" next-match-path))
                                     (state/callstack-tree-select-path dbg-state
                                                                       flow-id
                                                                       thread-id
@@ -120,7 +121,7 @@
                                      (.setText search-from-txt (str match-trace-idx))))
                                   (do
                                     (ui-utils/run-later (.setText search-match-lbl ""))
-                                    (tap> "No match found")))
+                                    (log "No match found")))
                                 (ui-utils/run-later (.setDisable search-btn false)))
                               (fn [progress-perc]
                                 (ui-utils/run-later
