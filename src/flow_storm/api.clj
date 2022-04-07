@@ -1,137 +1,132 @@
 (ns flow-storm.api
   "This is the only namespace intended for users.
   Provides functionality to connect to the debugger and instrument forms."
-  (:require [flow-storm.instrument.forms :as inst-forms]
+  (:require [flow-storm.tracer :as tracer]
             [flow-storm.instrument.namespaces :as inst-ns]
-            [flow-storm.tracer :as tracer]
-            [flow-storm.debugger.trace-processor :as trace-processor]
-            [flow-storm.debugger.main :as dbg-main]
-            [clojure.pprint :as pp]
-            [cljs.main :as cljs-main]
-            [clojure.repl :as clj.repl]
-            [cljs.repl :as cljs.repl]
-            [clojure.instant :as inst]))
+            [flow-storm.commands :as commands]))
 
-(def start-debugger dbg-main/start-debugger)
+(defn local-connect
 
-(defn local-connect []
-  (start-debugger)
-  (tracer/connect {:send-fn (fn [trace]
-                              (try
-                                (trace-processor/dispatch-trace trace)
-                                (catch Exception e
-                                  (tap> (str "Exception dispatching trace " (.getMessage e)))
-                                  (tap> e))))}))
+  "Start a debugger under this same JVM process and connect to it.
 
-(defn ws-connect [opts]
-  (let [{:keys [send-fn]} (tracer/build-ws-sender opts)]
-    (tracer/connect {:send-fn send-fn})))
+  This is the recommended way of using the debugger for debugging code that
+  generates a lot of data since data doesn't need to serialize/deserialize it like
+  in a remote debugging session case."
 
-(defn file-connect [opts]
-  (let [{:keys [send-fn]} (tracer/build-file-sender opts)]
-    (tracer/connect {:send-fn send-fn})))
+  []
+
+  (require '[flow-storm.debugger.trace-processor])
+  (require '[flow-storm.debugger.main])
+  (let [local-dispatch-trace (resolve 'flow-storm.debugger.trace-processor/dispatch-trace)
+        start-debugger       (resolve 'flow-storm.debugger.main/start-debugger)]
+    (start-debugger)
+    (tracer/connect {:send-fn (fn [trace]
+                                (try
+                                  (local-dispatch-trace trace)
+                                  (catch Exception e
+                                    (tap> (str "Exception dispatching trace " (.getMessage e)))
+                                    (tap> e))))})))
+
+(def instrument-var
+
+  "Instruments any var.
+
+  (instrument-var var-symb opts)
+
+  Lets say you are interested in debugging clojure.core/interpose you can do :
+
+  (instrument-var clojure.core/interpose {})
+
+  #rtrace (interpose :a [1 2 3])
+
+  Be careful instrumenting clojure.core functions or any functions that are being used
+  by repl system code since can be called constantly and generate a lot of noise.
+
+  Use `uninstrument-var` to remove instrumentation.
+
+  `opts` is a map that support :flow-id and :disable
+  See `instrument-forms-for-namespaces` for :disable"
+
+  commands/trace-var)
+
+(def uninstrument-var
+
+  "Remove instrumentation given a var symbol.
+
+  (uninstrument-var var-symb)"
+
+  commands/untrace-var)
+
+(def uninstrument-vars
+
+  "Bulk version of `uninstrument-var`.
+
+  (uninstrument-vars var-symbols)"
+
+  commands/untrace-vars)
+
+;; TODO: deduplicate code between `run` and `runi`
+(defn- run*
+  ([form] `(run {} ~form))
+  ([{:keys [ns flow-id]} form]
+   `(let [flow-id# ~(or flow-id 0)
+          curr-ns# ~(or ns `(str (ns-name *ns*)))]
+      (binding [tracer/*runtime-ctx* (tracer/empty-runtime-ctx flow-id#)]
+        (tracer/trace-flow-init-trace flow-id# curr-ns# ~(list 'quote form))
+        ~form))))
+
+(defmacro run
+
+  "Start a flow and run form for tracing.
+  Will setup the execution context so all instrumented functions tracing
+  derived from running `form` will end under the same flow.
+
+  (run opts form)
+
+  `opts` is a map that support the same keys as `instrument-var`."
+
+  [& args] (apply run* args))
+
+(defn- runi*
+  ([form] `(runi {} ~form))
+  ([{:keys [ns flow-id] :as opts} form]
+   `(let [flow-id# ~(or flow-id 0)
+          curr-ns# ~(or ns `(str (ns-name *ns*)))]
+      (binding [tracer/*runtime-ctx* (tracer/empty-runtime-ctx flow-id#)]
+        (tracer/trace-flow-init-trace flow-id# curr-ns# ~(list 'quote form))
+        ((commands/trace ~opts (fn [] ~form)))))))
+
+(defmacro runi
+
+  "Run instrumented.
+
+  (runi opts form)
+
+  Instrument form and run it for tracing.
+
+  Same as doing #rtrace `form`.
+
+  `opts` is a map that support the same keys as `instrument-var`. "
+
+  [& args] (apply runi* args))
+
+(def instrument-forms-for-namespaces
+
+  "Instrument all forms, in all namespaces that matches `prefixes`.
+
+  (instrument-forms-for-namespaces prefixes opts)
+
+  `prefixes` is a set of ns prefixes like #{\"cljs.compiler\" \"cljs.analyzer\"}
+
+  `opts` is a map containing :
+       - :excluding-ns  a set of strings with namespaces that should be excluded
+       - :disable is a set containing any of #{:expr :binding :anonymous-fn}
+                  useful for disabling unnecesary traces in code that generate too many traces
+  "
 
 
-#_(def trace-ref
-  "Adds a watch to ref with ref-name that traces its value changes.
-  The first argument is the ref to watch for.
-  The second argument is a options map. Available options are :
-  - :ref-name A string name for the ref.
-  - :ignore-keys A collection of keys that will be skipped in traces.
 
-  :ignore-keys only works for maps and does NOT ignore nested maps keys."
-  tracer/trace-ref)
-
-#_(def untrace-ref
-  "Removes the watch added by trace-ref."
-  tracer/untrace-ref)
-
-(defn- pprint-on-err [x]
-  (binding [*out* *err*] (pp/pprint x)))
-
-(defmacro trace
-  "Recursively instrument a form for tracing."
-  ;; TODO: make it possible with the trace macro to set a flow id
-  ([form] `(trace {:disable #{}} ~form)) ;; need to do this so multiarity macros work
-  ([config form]
-   (let [form-ns (str (ns-name *ns*))
-         ctx (inst-forms/build-form-instrumentation-ctx config form-ns form &env)
-         inst-code (-> form
-                       (inst-forms/instrument-all ctx)
-                       (inst-forms/maybe-unwrap-outer-form-instrumentation ctx))]
-
-     ;; Uncomment to debug
-     ;; Printing on the *err* stream is important since
-     ;; printing on standard output messes  with clojurescript macroexpansion
-     #_(pprint-on-err (inst-forms/macroexpand-all form))
-     #_(pprint-on-err inst-code)
-
-     inst-code)))
-
-(defn trace-var [var-symb config]
-  (let [form (some->> (clj.repl/source-fn var-symb)
-                      (read-string {:read-cond :allow}))
-        form-ns (find-ns (symbol (namespace var-symb)))]
-    (if form
-
-      (binding [*ns* form-ns]
-        (inst-ns/trace-form form-ns form config))
-
-      (println "Couldn't find source for " var-symb))))
-
-(defn eval-form-bulk [forms]
-  (doseq [{:keys [form-ns form]} forms]
-    (binding [*ns* (find-ns (symbol form-ns))]
-      (eval form))))
-
-(defn trace-form-bulk [forms config]
-  (doseq [{:keys [form-ns form]} forms]
-    (binding [*ns* (find-ns (symbol form-ns))]
-      (inst-ns/trace-form (find-ns (symbol form-ns)) form config))))
-
-(defn untrace-var [var-symb]
-  (let [ns-name (namespace var-symb)]
-    (binding [*ns* (find-ns (symbol ns-name))]
-      (let [form (some->> (clj.repl/source-fn var-symb)
-                          (read-string {:read-cond :allow}))
-            expanded-form (inst-forms/macroexpand-all macroexpand-1 form ::original-form)]
-        (if form
-
-          (if (inst-forms/expanded-def-form? expanded-form)
-            (let [[v vval] (inst-ns/expanded-defn-parse ns-name expanded-form)]
-              (alter-var-root v (fn [_] (eval vval)))
-              (tap> (format "Untraced %s" v)))
-
-            (tap> (format "Don't know howto untrace %s" (pr-str expanded-form))))
-
-          (println "Couldn't find source for " var-symb))))))
-
-(defn untrace-vars [vars-symbs]
-  (doseq [var-symb vars-symbs]
-    (untrace-var var-symb)))
-
-(def trace-files-for-namespaces inst-ns/trace-files-for-namespaces)
-
-(defn read-trace-tag [form]
-  `(flow-storm.api/trace ~form))
-
-(defn read-ztrace-tag [form]
-  `(flow-storm.api/trace 0 ~form))
-
-(defmacro run-with-execution-ctx
-  [{:keys [orig-form ns flow-id]} form]
-  `(let [flow-id# ~(or flow-id 0)
-         curr-ns# ~(or ns `(str (ns-name *ns*)))]
-     (binding [tracer/*runtime-ctx* (tracer/empty-runtime-ctx flow-id#)]
-       (tracer/trace-flow-init-trace flow-id# curr-ns# ~(or orig-form (list 'quote form)))
-       ~form)))
-
-(defn re-run-flow [flow-id {:keys [ns form]}]
-  (binding [*ns* (find-ns (symbol ns))]
-    (run-with-execution-ctx
-     {:flow-id flow-id
-      :orig-form form}
-     (eval form))))
+  inst-ns/trace-files-for-namespaces)
 
 (comment
 
@@ -148,26 +143,8 @@
    (defn boo [xs]
      (reduce + (map factorial xs))))
 
-  (run-with-execution-ctx
+  (run
    {}
    (factorial 5)
    #_(boo [2 3 4]))
-
-  (flow-storm.debugger.state/init-state!)
-  flow-storm.debugger.state/*state
   )
-
-;; Run with : clj -X flow-storm.api/cljs-test
-#_(defn cljs-test [& args]
-
-  (local-connect)
-
-  (time
-   (trace-files-for-namespaces "cljs." {:disable #{:expr :binding}})
-   )
-
-  (time
-   (run-with-execution-ctx
-    {:flow-id 0}
-    (cljs-main/-main "-t" "nodejs" "/home/jmonetta/tmp/cljstest/foo/script.cljs")))
-    )

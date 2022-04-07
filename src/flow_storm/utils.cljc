@@ -2,6 +2,12 @@
   (:require [flow-storm.tracer])
   (:import [flow_storm.tracer FormInitTrace BindTrace FnCallTrace ExecTrace]))
 
+(defn read-trace-tag [form]
+  `(flow-storm.commands/trace ~form))
+
+(defn read-rtrace-tag [form]
+  `(flow-storm.api/runi ~form))
+
 (defn colored-string [s c]
   (let [color {:red 31
                :yellow 33}]

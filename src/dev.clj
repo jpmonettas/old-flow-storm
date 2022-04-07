@@ -17,14 +17,18 @@
   ;; this will restart the debugger (state and ui), the send-thread and the trace-queue
   (fs-api/local-connect)
 
-  (fs-api/trace-files-for-namespaces #{"dev-tester"}
-                                     {:disable #{} #_#{:expr :anonymous-fn :binding}})
+  (fs-api/instrument-forms-for-namespaces #{"dev-tester"}
+                                          {:disable #{} #_#{:expr :anonymous-fn :binding}})
 
   ;; add some data for dev
-  (fs-api/run-with-execution-ctx
-   {:flow-id 0
-    :ns "dev"}
-   (dev-tester/boo [2 "hello" 8]))
+  (fs-api/run
+    {:flow-id 0
+     :ns "dev"}
+    (dev-tester/boo [2 "hello" 8]))
+
+  (fs-api/runi
+   (/ (* (+ 1 2) 5) 15)
+   )
 
   )
 
