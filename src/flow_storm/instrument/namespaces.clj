@@ -6,7 +6,12 @@
             [flow-storm.utils :as utils :refer [log]])
   (:import [java.io PushbackReader]))
 
-(defn all-ns-with-prefixes [prefixes {:keys [excluding-ns]}]
+(defn all-ns-with-prefixes
+
+  "Return all loaded namespaces that start with `prefixes` but
+  excluding `excluding-ns`."
+
+  [prefixes {:keys [excluding-ns]}]
   (->> (all-ns)
        (keep (fn [ns]
                (let [nsname (str (ns-name ns))]
@@ -16,11 +21,18 @@
                                   prefixes))
                   ns))))))
 
-(defn ns-vars [ns]
+(defn ns-vars
+
+  "Return all vars for a `ns`."
+
+  [ns]
   (vals (ns-interns ns)))
 
 (defn interesting-files-for-namespaces
-  "Try to find as much project files as possible for namespaces that start with `prefix`."
+
+  "Given a set of namespaces `ns-set` return a set of all files
+  used to load them."
+
   [ns-set]
   (reduce (fn [r ns]
             (let [ns-vars (vals (ns-interns ns))]
@@ -31,7 +43,12 @@
           #{}
           ns-set))
 
-(defn uninteresting-form? [ns form]
+(defn uninteresting-form?
+
+  "Predicate to check if a `form` is interesting to instrument."
+
+  [ns form]
+
   (or (nil? form)
       (when (and (seq? form)
                  (symbol? (first form)))
@@ -57,12 +74,23 @@
             kind (inst-forms/expanded-form-type macro-expanded-form {:compiler :clj})]
         (not (contains? #{:defn :defmethod :extend-type :extend-protocol} kind)))))
 
-(defn expanded-defn-parse [ns-name expanded-defn-form]
+(defn expanded-defn-parse
+
+  "Given a `ns-name` and a `expanded-defn-form` (macroexpanded) returns
+  [fn-name-symbol fn-body]."
+
+  [ns-name expanded-defn-form]
+
   (let [[_ var-name var-val] expanded-defn-form
         var-symb (symbol ns-name (str var-name))]
     [(find-var var-symb) var-val]))
 
-(defn instrument-form [ns form config]
+(defn instrument-and-eval-form
+
+  "Instrument `form` and evaluates it under `ns`."
+
+  [ns form config]
+
   (let [ctx (inst-forms/build-form-instrumentation-ctx config (str (ns-name ns)) form nil)
 
         inst-form (try
@@ -78,7 +106,8 @@
           (alter-var-root v (fn [_] (eval vval))))
         (eval inst-form))
       (catch Exception e
-        #_(log-error "Evaluating form" e)
+        ;; (utils/log-error "Evaluating form" e)
+        ;; (System/exit 1)
         (let [e-msg (.getMessage e)
               ex-type (cond
 
@@ -91,9 +120,13 @@
           (throw (ex-info "Error evaluating form" {:type ex-type})))))))
 
 (defn read-file-ns-decl
-  "Attempts to read a (ns ...) declaration from file, and returns the
-  unevaluated form. Returns nil if ns declaration cannot be found.
-  read-opts is passed through to tools.reader/read."
+
+  "Attempts to read a (ns ...) declaration from `file` and returns the unevaluated form.
+
+  Returns nil if ns declaration cannot be found.
+
+  `read-opts` is passed through to tools.reader/read."
+
   [file]
   (let [ns-decl? (fn [form] (and (list? form) (= 'ns (first form))))]
     (with-open [rdr (PushbackReader. (io/reader file))]
@@ -107,22 +140,25 @@
              (= ::eof form) nil
              :else (recur))))))))
 
-(defn instrument-file-forms [file config]
-  #_(print "About to instrument file " (.getFile file))
-  (let [[_ ns-from-decl] (read-file-ns-decl file)]
+(defn- instrument-and-eval-file-forms
+
+  "Instrument and evaluates all forms in `file-url`"
+
+  [file-url config]
+
+  (let [[_ ns-from-decl] (read-file-ns-decl file-url)]
     (if-not ns-from-decl
 
-      (log (format "Warning, skipping %s since it doesn't contain a (ns ) decl. We don't support (in-ns ...) yet." (.getFile file)))
+      (log (format "Warning, skipping %s since it doesn't contain a (ns ) decl. We don't support (in-ns ...) yet." (.getFile file-url)))
 
       ;; this is IMPORTANT, once we have `ns-from-decl` all the instrumentation work
       ;; should be done as if we where in `ns-from-decl`
-      (binding [*ns* (find-ns ns-from-decl)
-                inst-forms/*environment* {}]
+      (binding [*ns* (find-ns ns-from-decl)]
         (when-not (= ns-from-decl 'clojure.core) ;; we don't want to instrument clojure core since it brings too much noise
          (let [ns (find-ns ns-from-decl)
                file-forms (read-string {:read-cond :allow}
-                                       (format "[%s]" (slurp file)))]
-           (log (format "Instrumenting namespace: %s Forms (%d) (%s)" ns-from-decl (count file-forms) (.getFile file)))
+                                       (format "[%s]" (slurp file-url)))]
+           (log (format "Instrumenting namespace: %s Forms (%d) (%s)" ns-from-decl (count file-forms) (.getFile file-url)))
 
            (doseq [form file-forms]
              (try
@@ -131,7 +167,7 @@
                  (print ".")
 
                  (do
-                   (instrument-form ns form config)
+                   (instrument-and-eval-form ns form config)
                    (print "I")))
 
                (catch clojure.lang.ExceptionInfo ei
@@ -145,11 +181,17 @@
                        :unknown-error (print (utils/colored-string "X" :red)))))))
            (println)))))))
 
-(defn instrument-files-for-namespaces [prefixes config]
+(defn instrument-files-for-namespaces
+
+  "Instrument and evaluates all forms of all loaded namespaces matching
+  the `prefixes` set."
+
+  [prefixes config]
+
   (let [config (-> config
                    (update :excluding-ns #(or % #{}))
                    (update :disable #(or % #{})))
         ns-set (all-ns-with-prefixes prefixes config)
         files-set (interesting-files-for-namespaces ns-set)]
     (doseq [file files-set]
-      (instrument-file-forms file config))))
+      (instrument-and-eval-file-forms file config))))

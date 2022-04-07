@@ -6,8 +6,9 @@
             [clojure.repl :as clj.repl]))
 
 (defmacro instrument
+
   "Recursively instrument a form for tracing."
-  ;; TODO: make it possible with the trace macro to set a flow id
+
   ([form] `(instrument {:disable #{}} ~form)) ;; need to do this so multiarity macros work
   ([config form]
    (let [form-ns (str (ns-name *ns*))
@@ -33,7 +34,7 @@
     (if form
 
       (binding [*ns* form-ns]
-        (inst-ns/instrument-form form-ns form config))
+        (inst-ns/instrument-and-eval-form form-ns form config))
 
       (log (format "Couldn't find source for %s" var-symb)))))
 
@@ -66,17 +67,32 @@
        (tracer/trace-flow-init-trace flow-id# curr-ns# ~(or orig-form (list 'quote form)))
        ~form)))
 
-(defn eval-form-bulk [forms]
+(defn eval-form-bulk
+
+  "Forms should be a collection of maps with :form-ns :form.
+  Evaluates each `form` under `form-ns`"
+
+  [forms]
   (doseq [{:keys [form-ns form]} forms]
     (binding [*ns* (find-ns (symbol form-ns))]
       (eval form))))
 
-(defn instrument-form-bulk [forms config]
+(defn instrument-form-bulk
+
+  "Forms should be a collection of maps with :form-ns :form.
+  Evaluates each `form` under `form-ns` instrumented."
+
+  [forms config]
   (doseq [{:keys [form-ns form]} forms]
     (binding [*ns* (find-ns (symbol form-ns))]
-      (inst-ns/instrument-form (find-ns (symbol form-ns)) form config))))
+      (inst-ns/instrument-and-eval-form (find-ns (symbol form-ns)) form config))))
 
-(defn re-run-flow [flow-id {:keys [ns form]}]
+(defn re-run-flow
+
+  "Evaluates `form` under `ns` inside a execution-ctx"
+
+  [flow-id {:keys [ns form]}]
+
   (binding [*ns* (find-ns (symbol ns))]
     (run-with-execution-ctx
      {:flow-id flow-id

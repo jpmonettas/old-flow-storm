@@ -1,4 +1,5 @@
 (ns flow-storm.instrument.forms
+
   "This namespace started as a fork of cider.instrument but
   departed a lot from it to make it work for clojurescript and
   to make it able to trace more stuff.
@@ -15,21 +16,19 @@
 ;; Some utilities ;;
 ;;;;;;;;;;;;;;;;;;;;
 
-;; This will contain the macroexpansion environment
-;; the same you can get with the &env in defmacro
-(def ^:dynamic *environment*)
-
 (declare instrument-outer-form)
 (declare instrument-coll)
 (declare instrument-special-form)
 (declare instrument-function-call)
 
 (defn merge-meta
+
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
   Like `vary-meta`, this only applies to immutable objects. For
   instance, this function does nothing on atoms, because the metadata
   of an `atom` is part of the atom itself and can only be changed
   destructively."
+
   {:style/indent 1}
   [obj & metamaps]
   (try
@@ -37,8 +36,10 @@
     (catch Exception _ obj)))
 
 (defn strip-meta
+
   "Strip meta from form.
   If keys are provided, strip only those keys."
+
   ([form] (strip-meta form nil))
   ([form keys]
    (if (and (instance? clojure.lang.IObj form)
@@ -49,8 +50,11 @@
      form)))
 
 (defn macroexpand+
+
   "A macroexpand version that support custom `macroexpand-1-fn`"
+
   [macroexpand-1-fn form]
+
   (let [ex (if (seq? form)
              (macroexpand-1-fn form)
              form)]
@@ -59,10 +63,13 @@
       (macroexpand+ macroexpand-1-fn ex))))
 
 (defn macroexpand-all
+
   "Like `clojure.walk/macroexpand-all`, but preserves and macroexpands
   metadata. Also store the original form (unexpanded and stripped of
   metadata) in the metadata of the expanded form under original-key."
+
   [macroexpand-1-fn form & [original-key]]
+
   (let [md (meta form)
         expanded (walk/walk #(macroexpand-all macroexpand-1-fn % original-key)
                             identity
@@ -123,10 +130,13 @@
 (declare instrument)
 
 (defmacro definstrumenter
+
   "Defines a private function for instrumenting forms.
   This is like `defn-`, except the metadata of the return value is
   merged with that of the first input argument."
+
   [& args]
+
   (let [[_ name f] (macroexpand `(defn- ~@args))]
     `(def ~name
        (fn [& args#] (merge-meta (apply ~f args#) (meta (first args#)))))))
@@ -143,9 +153,12 @@
                 args)))
 
 (defn- uninteresting-symb?
+
   "Return true if it is a uninteresting simbol,
-  like core.async, generated symbols, the _ symbol, etc."
+  like core.async generated symbols, the _ symbol, etc."
+
   [symb]
+
   (let [symb-name (name symb)]
     (or (= symb-name "_")
         (= symb-name "&")
@@ -159,8 +172,11 @@
         (str/includes? symb-name "inst_"))))
 
 (defn- bind-tracer
-  "Generates a form to trace a symbol value at coor."
+
+  "Generates a form to trace a `symb` binding at `coor`."
+
   [symb coor {:keys [on-bind-fn disable] :as ctx}]
+
   (when-not (or (disable :binding)
                 (uninteresting-symb? symb))
     `(~on-bind-fn
@@ -170,31 +186,36 @@
         :form-id (:form-id ctx)})))
 
 (defn- args-bind-tracers
-  "Generates a collection of forms to trace args-vec symbols at coord."
+
+  "Generates a collection of forms to trace `args-vec` symbols at `coor`.
+  Used for tracing all arguments of a fn."
+
   [args-vec coor ctx]
+
+  ;;TODO: maybe we can have a trace that send all bindings together, instead
+  ;; of one binding trace per argument.
+
   (->> args-vec
        (keep (fn [symb] (bind-tracer symb coor ctx)))))
-
-(defn remove-&-symb [args]
-  (into [] (keep #(when-not (= % '&) %) args)))
-
-(defn remove-type-hint-tags [args]
-  (mapv (fn [a]
-          (if (contains? (meta a) :tag)
-            (vary-meta a dissoc :tag)
-            a))
-        args))
-
-(defn clear-fn-args-vec [args]
-  (-> args
-      remove-&-symb
-      remove-type-hint-tags))
 
 (defn lazy-seq-form? [form]
   (and (seq? form)
        (let [[a b] form]
          (and (= a 'new)
               (= b 'clojure.lang.LazySeq)))))
+
+(defn- clear-fn-args-vec [args]
+  (let [remove-&-symb (fn [args]
+                        (into [] (keep #(when-not (= % '&) %) args)))
+        remove-type-hint-tags (fn [args]
+                                (mapv (fn [a]
+                                        (if (contains? (meta a) :tag)
+                                          (vary-meta a dissoc :tag)
+                                          a))
+                                      args))]
+    (-> args
+        remove-&-symb
+        remove-type-hint-tags)))
 
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
