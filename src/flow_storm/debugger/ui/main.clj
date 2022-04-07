@@ -1,6 +1,6 @@
 (ns flow-storm.debugger.ui.main
   (:require [flow-storm.debugger.ui.utils :as ui-utils :refer [event-handler run-later h-box v-box]]
-            [flow-storm.debugger.ui.flows :as ui-flows]
+            [flow-storm.debugger.ui.flows.screen :as flows-screen]
             [flow-storm.debugger.ui.state-vars :refer [main-pane stage scene store-obj obj-lookup]]
             [flow-storm.debugger.ui.state-vars :as ui-vars]
             [clojure.java.io :as io])
@@ -26,7 +26,7 @@
   (let [tabs-p (TabPane.)
         tabs (.getTabs tabs-p)
         flows-tab (doto (ui-utils/tab "Flows" "vertical-tab")
-                    (.setContent (ui-flows/main-pane)))
+                    (.setContent (flows-screen/main-pane)))
         refs-tab (doto (Tab. "Refs")
                    (.setContent (Label. "Refs comming soon"))
                    (.setDisable true))

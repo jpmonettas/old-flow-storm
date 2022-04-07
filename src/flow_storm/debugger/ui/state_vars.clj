@@ -86,10 +86,10 @@
 (defn thread-locals-list-id [thread-id]
   (format "locals_list_%d" thread-id))
 
-(defn thread-instrument-list-id [thread-id]
+(defn thread-fns-list-id [thread-id]
   (format "instrument_list_%d" thread-id))
 
-(defn thread-instrument-fn-calls-list-id [thread-id]
+(defn thread-fn-calls-list-id [thread-id]
   (format "instrument_fn_calls_list_%d" thread-id))
 
 (defn thread-callstack-tree-view-id [thread-id]
