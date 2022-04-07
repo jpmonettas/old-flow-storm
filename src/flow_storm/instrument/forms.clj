@@ -20,6 +20,7 @@
 (declare instrument-coll)
 (declare instrument-special-form)
 (declare instrument-function-call)
+(declare instrument-case-map)
 
 (defn merge-meta
 
@@ -217,6 +218,120 @@
         remove-&-symb
         remove-type-hint-tags)))
 
+(defn instrument-dot [args ctx]
+  (list* (first args)
+         ;; To handle the case when second argument to dot call
+         ;; is a list e.g (. class-name (method-name args*))
+         ;; The values present as args* should be instrumented.
+         (let [s (second args)]
+           (if (coll? s)
+             (->> (instrument-coll (rest s) ctx)
+                  (concat (cons (first s) '())))
+             s))
+         (instrument-coll (rest (rest args)) ctx)))
+
+(defn instrument-def [args ctx]
+  (let [[sym & rargs] args]
+    (list* (merge-meta sym
+                       ;; Instrument the metadata, because
+                       ;; that's where tests are stored.
+                       (instrument (or (meta sym) {}) ctx)
+                       ;; to be used later for meta stripping
+                       {::def-symbol true})
+
+           (map (fn [arg] (instrument arg ctx)) rargs))))
+
+(defn instrument-loop*-like
+
+  "Trace lets and loops bindings right side recursively."
+
+  [[_ & args :as form] {:keys [disable] :as ctx}]
+
+  (cons (->> (first args)
+             (partition 2)
+             (mapcat (fn [[symb x]]
+                       (if (or (uninteresting-symb? symb)
+                               (#{'loop*} name))
+                         [symb (instrument x ctx)]
+
+                         ;; if it is not a loop add more _ bindings
+                         ;; that just trace the bound values
+                         ;; like [a (+ 1 2)] will became
+                         ;; [a (+ 1 2)
+                         ;;  _ (bound-trace a ...)]
+                         (cond-> [symb (instrument x ctx)]
+                           ;; doesn't make sense to trace the bind if its a letfn* since
+                           ;; they are just fns
+                           (and (not (disable :binding))
+                                (not= 'letfn* name))
+                           (into ['_ (bind-tracer symb (-> form meta ::coor) ctx)])))))
+             vec)
+        (instrument-coll (rest args) ctx)))
+
+(defn instrument-fn* [[_ & args :as form] {:keys [orig-outer-form form-id form-ns on-outer-form-init-fn on-fn-call-fn disable excluding-fns] :as ctx}]
+  (let [[a1 & a1r] args
+        {:keys [defn-def]} ctx
+        ;; if current ctx contains a defn-def, it is because we are a defn fn*, so use it to trace the fn-call
+        ;; then remove it from ctx so fn* declared down the road don't think they are defn
+        instrument-fn-arities-bodies (fn [fn-name [arity-args-vec & arity-body-forms :as arity]]
+                                       (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
+                                             outer-preamble (-> []
+                                                                (into [`(~on-outer-form-init-fn {:form-id ~form-id
+                                                                                                 :ns ~form-ns
+                                                                                                 :def-kind ~(:kind defn-def)
+                                                                                                 :dispatch-val ~(:dispatch-val defn-def)
+                                                                                                 }
+                                                                         (quote ~orig-outer-form)
+                                                                         )])
+                                                                (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
+                                                                (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
+
+                                             ctx' (-> ctx
+                                                      (assoc :orig-form orig-form)
+                                                      (dissoc :defn-def))
+
+                                             lazy-seq-fn? (lazy-seq-form? (first arity-body-forms))
+                                             inst-arity-body-form (if (or (and (disable :anonymous-fn) (not defn-def))
+                                                                          (excluding-fns (symbol form-ns (str fn-name)))
+                                                                          lazy-seq-fn?)
+                                                                    ;; SKIP instrumentation
+                                                                    ;;
+                                                                    ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
+                                                                    ;; recursion and we risk getting a StackOverflow.
+                                                                    ;; If we can't wrap the output we can't wrap the call neither since
+                                                                    ;; they are sinchronized, so we skip this fn* body tracing
+                                                                    `(do ~@arity-body-forms)
+
+                                                                    (instrument-outer-form ctx'
+                                                                                           (instrument-coll arity-body-forms ctx')
+                                                                                           outer-preamble))]
+                                         (-> `(~arity-args-vec ~inst-arity-body-form)
+                                             (merge-meta (meta arity)))))
+        [fn-name arities-bodies-seq] (cond
+
+                                       ;; named fn like (fn* fn-name ([] ...) ([p1] ...))
+                                       (symbol? a1)
+                                       [a1 a1r]
+
+                                       ;; anonymous fn like (fn* [] ...), comes from expanding #( % )
+                                       (vector? a1)
+                                       [(gensym "fn-") [`(~a1 ~@a1r)]]
+
+                                       ;; anonymous fn like (fn* ([] ...) ([p1] ...))
+                                       :else
+                                       [(or (:fn-name defn-def) (gensym "fn-")) args])
+        instrumented-arities-bodies (map #(instrument-fn-arities-bodies fn-name %) arities-bodies-seq)]
+
+    `(~fn-name ~@instrumented-arities-bodies)))
+
+(defn instrument-case* [args ctx]
+  (case (:compiler ctx)
+    :clj (let [[a1 a2 a3 a4 a5 & ar] args]
+           ;; Anyone know what a2 and a3 represent? They were always 0 on my tests.
+           `(~a1 ~a2 ~a3 ~(instrument a4 ctx) ~(instrument-case-map a5 ctx) ~@ar))
+    :cljs (let [[a1 left-vec right-vec else] args]
+            `(~a1 ~left-vec ~(instrument-coll right-vec ctx) ~(instrument else ctx)))))
+
 (definstrumenter instrument-special-form
   "Instrument form representing a macro call or special-form."
   [[name & args :as form] {:keys [orig-outer-form form-id form-ns on-outer-form-init-fn on-fn-call-fn disable excluding-fns] :as ctx}]
@@ -229,122 +344,21 @@
             '#{if do recur throw finally try monitor-exit monitor-enter} (instrument-coll args ctx)
                  '#{new} (cons (first args) (instrument-coll (rest args) ctx))
                  '#{quote & var clojure.core/import*} args
-                 '#{.} (list* (first args)
-                              ;; To handle the case when second argument to dot call
-                              ;; is a list e.g (. class-name (method-name args*))
-                              ;; The values present as args* should be instrumented.
-                              (let [s (second args)]
-                                (if (coll? s)
-                                  (->> (instrument-coll (rest s) ctx)
-                                       (concat (cons (first s) '())))
-                                  s))
-                              (instrument-coll (rest (rest args)) ctx))
-                 '#{def} (let [[sym & rargs] args]
-                           (list* (merge-meta sym
-                                    ;; Instrument the metadata, because
-                                    ;; that's where tests are stored.
-                                    (instrument (or (meta sym) {}) ctx)
-                                    ;; to be used later for meta stripping
-                                    {::def-symbol true})
-
-                                  (map (fn [arg] (instrument arg ctx)) rargs)))
-
+                 '#{.} (instrument-dot args ctx)
+                 '#{def} (instrument-def args ctx)
                  '#{set!} (list (first args)
                                 (instrument (second args) ctx))
-
-                 ;; trace lets and loops bindings right side recursively
-                 '#{loop* let* letfn*} (cons (->> (first args)
-                                                  (partition 2)
-                                                  (mapcat (fn [[symb x]]
-                                                            (if (or (uninteresting-symb? symb)
-                                                                    (#{'loop*} name))
-                                                              [symb (instrument x ctx)]
-
-                                                              ;; if it is not a loop add more _ bindings
-                                                              ;; that just trace the bound values
-                                                              ;; like [a (+ 1 2)] will became
-                                                              ;; [a (+ 1 2)
-                                                              ;;  _ (bound-trace a ...)]
-                                                              (cond-> [symb (instrument x ctx)]
-                                                                ;; doesn't make sense to trace the bind if its a letfn* since
-                                                                ;; they are just fns
-                                                                (and (not (disable :binding))
-                                                                     (not= 'letfn* name))
-                                                                (into ['_ (bind-tracer symb (-> form meta ::coor) ctx)])))))
-                                                  vec)
-                                             (instrument-coll (rest args) ctx))
+                 '#{loop* let* letfn*} (instrument-loop*-like form ctx)
                  '#{reify* deftype*} (map #(if (seq? %)
                                              (let [[a1 a2 & ar] %]
                                                (merge-meta (list* a1 a2 (instrument-coll ar ctx))
                                                  (meta %)))
                                              %)
                                           args)
-                 ;; `fn*` has several possible syntaxes.
-                 '#{fn*} (let [[a1 & a1r] args
-                               {:keys [defn-def]} ctx
-                               ;; if current ctx contains a defn-def, it is because we are a defn fn*, so use it to trace the fn-call
-                               ;; then remove it from ctx so fn* declared down the road don't think they are defn
-                               instrument-fn-arities-bodies (fn [fn-name [arity-args-vec & arity-body-forms :as arity]]
-                                                              (let [orig-form (or (:orig-form defn-def) (::original-form (meta form)))
-                                                                    outer-preamble (-> []
-                                                                                       (into [`(~on-outer-form-init-fn {:form-id ~form-id
-                                                                                                                        :ns ~form-ns
-                                                                                                                        :def-kind ~(:kind defn-def)
-                                                                                                                        :dispatch-val ~(:dispatch-val defn-def)
-                                                                                                                        }
-                                                                                                (quote ~orig-outer-form)
-                                                                                                )])
-                                                                                       (into [`(~on-fn-call-fn ~form-id ~form-ns ~(str fn-name) ~(clear-fn-args-vec arity-args-vec))])
-                                                                                       (into (args-bind-tracers arity-args-vec (-> form meta ::coor) ctx)))
-
-                                                                    ctx' (-> ctx
-                                                                             (assoc :orig-form orig-form)
-                                                                             (dissoc :defn-def))
-
-                                                                    lazy-seq-fn? (lazy-seq-form? (first arity-body-forms))
-                                                                    inst-arity-body-form (if (or (and (disable :anonymous-fn) (not defn-def))
-                                                                                                 (excluding-fns (symbol form-ns (str fn-name)))
-                                                                                                 lazy-seq-fn?)
-                                                                                           ;; SKIP instrumentation
-                                                                                           ;;
-                                                                                           ;; if the fn* returns a lazy-seq we can't wrap it or we will generate a
-                                                                                           ;; recursion and we risk getting a StackOverflow.
-                                                                                           ;; If we can't wrap the output we can't wrap the call neither since
-                                                                                           ;; they are sinchronized, so we skip this fn* body tracing
-                                                                                           `(do ~@arity-body-forms)
-
-                                                                                           (instrument-outer-form ctx'
-                                                                                                                  (instrument-coll arity-body-forms ctx')
-                                                                                                                  outer-preamble))]
-                                                                (-> `(~arity-args-vec ~inst-arity-body-form)
-                                                                    (merge-meta (meta arity)))))
-                               [fn-name arities-bodies-seq] (cond
-
-                                                              ;; named fn like (fn* fn-name ([] ...) ([p1] ...))
-                                                              (symbol? a1)
-                                                              [a1 a1r]
-
-                                                              ;; anonymous fn like (fn* [] ...), comes from expanding #( % )
-                                                              (vector? a1)
-                                                              [(gensym "fn-") [`(~a1 ~@a1r)]]
-
-                                                              ;; anonymous fn like (fn* ([] ...) ([p1] ...))
-                                                              :else
-                                                              [(or (:fn-name defn-def) (gensym "fn-")) args])
-                               instrumented-arities-bodies (map #(instrument-fn-arities-bodies fn-name %) arities-bodies-seq)]
-
-                           `(~fn-name ~@instrumented-arities-bodies))
-
+                 '#{fn*} (instrument-fn* form ctx)
                  '#{catch} `(~@(take 2 args)
                              ~@(instrument-coll (drop 2 args) ctx))
-
-                 ;; case* special form is implemented differently in clojure and clojurescript
-                 '#{case*} (case (:compiler ctx)
-                             :clj (let [[a1 a2 a3 a4 a5 & ar] args]
-                                    ;; Anyone know what a2 and a3 represent? They were always 0 on my tests.
-                                    `(~a1 ~a2 ~a3 ~(instrument a4 ctx) ~(instrument-case-map a5 ctx) ~@ar))
-                             :cljs (let [[a1 left-vec right-vec else] args]
-                                     `(~a1 ~left-vec ~(instrument-coll right-vec ctx) ~(instrument else ctx)))))
+                 '#{case*} (instrument-case* args ctx))
           (catch Exception e
             (binding [*print-length* 4
                       *print-level*  2
