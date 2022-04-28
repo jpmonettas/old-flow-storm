@@ -1,6 +1,9 @@
 # flow-storm
 
-Tracing companion library for the [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) (A Clojure and ClojureScript debugger)
+# Important! If you are looking for a Clojure[Script] debugger, this project is deprecated in favor of [flow-storm-debugger 2.0](https://github.com/jpmonettas/flow-storm-debugger). 
+# This is here only for historical reasons
+
+Tracing companion library for the [flow-storm-debugger 1.0](https://github.com/jpmonettas/flow-storm-debugger/tree/v1-master) (A Clojure and ClojureScript debugger)
 
 Use this library to instrument your code.
 
@@ -12,13 +15,13 @@ Big thanks to the [Cider](https://github.com/clojure-emacs/cider-nrepl) team for
 
 ## Step 1 (Running the debugger)
 
-In a terminal run a [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger) instance.
+In a terminal run a flow-storm-debugger instance.
 
 ```bash
 clj -Sdeps '{:deps {jpmonettas/flow-storm-debugger {:mvn/version "0.6.0"}}}' -m flow-storm-debugger.main
 ```
 
-This will run the debugger. For instructions on using the debugger see [flow-storm-debugger](https://github.com/jpmonettas/flow-storm-debugger).
+This will run the debugger. For instructions on using the debugger see flow-storm-debugger.
 
 One instance of the debugger is enough for all you Clojure and ClojureScript projects.
 
